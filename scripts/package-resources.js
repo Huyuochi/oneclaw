@@ -898,6 +898,7 @@ function installDependencies(opts, gatewayDir) {
     pruneDanglingBinLinks(nmDir);
     assertNativeDepsMatchTarget(nmDir, opts.platform, opts.arch);
     patchWindowsOpenclawArtifacts(gatewayDir, opts.platform);
+    injectBuiltinSkills(gatewayDir);
     return;
   }
 
@@ -947,6 +948,7 @@ function installDependencies(opts, gatewayDir) {
   pruneDanglingBinLinks(nmDir);
   assertNativeDepsMatchTarget(nmDir, opts.platform, opts.arch);
   patchWindowsOpenclawArtifacts(gatewayDir, opts.platform);
+  injectBuiltinSkills(gatewayDir);
   fs.writeFileSync(stampPath, targetStamp);
   log("node_modules 裁剪完成");
 }
@@ -1134,6 +1136,32 @@ function patchAsarBoundaryCheck(gatewayDir) {
 
 // ─── Step 2.5: 注入 bundled 插件（kimi-claw + kimi-search） ───
 
+// 把仓库 builtin-skills/ 下的 skill 注入 openclaw bundled skills 目录。
+// 必须在 pruneOpenclawSkills() 之后调用，否则会被白名单裁掉。
+function injectBuiltinSkills(gatewayDir) {
+  const builtinDir = path.join(__dirname, "..", "builtin-skills");
+  if (!fs.existsSync(builtinDir)) return;
+
+  const skillDirs = fs
+    .readdirSync(builtinDir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && !e.name.startsWith("."))
+    .filter((e) => fs.existsSync(path.join(builtinDir, e.name, "SKILL.md")));
+  if (skillDirs.length === 0) return;
+
+  const destBase = path.join(gatewayDir, "node_modules", "openclaw", "skills");
+  ensureDir(destBase);
+
+  for (const entry of skillDirs) {
+    const dest = path.join(destBase, entry.name);
+    if (fs.existsSync(dest)) {
+      die(`builtin skill "${entry.name}" 与上游 openclaw skill 同名，请先从白名单移除`);
+    }
+    fs.cpSync(path.join(builtinDir, entry.name), dest, { recursive: true });
+  }
+  log(`已注入 ${skillDirs.length} 个 OneClaw 内置 skill`);
+}
+
+// ─── Step 2.5: 注入 bundled 插件（kimi-claw + kimi-search + qqbot + dingtalk） ───
 // 插件定义（id → 下载/缓存参数）
 //
 // 注：dingtalk-connector 由 extensions-mirror（外部插件扫描路径）回滚到 bundled
