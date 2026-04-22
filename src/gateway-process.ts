@@ -474,7 +474,9 @@ function killProcess(pid: number): void {
       process.kill(pid, "SIGKILL");
     }
   } catch (err: any) {
-    diagLog(`killProcess(${pid}) 失败: ${err.message ?? err}`);
+    // Windows 下 err.message 会包含 taskkill 的 GBK stderr，避免污染日志只记录退出码。
+    const code = err?.code ?? "unknown";
+    diagLog(`killProcess(${pid}) 失败 (exit=${code})`);
   }
 }
 

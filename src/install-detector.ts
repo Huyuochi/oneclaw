@@ -221,7 +221,10 @@ export async function killPortProcess(pid: number): Promise<boolean> {
     }
     return true;
   } catch (err) {
-    log.error(`[install-detector] kill PID ${pid} failed: ${err instanceof Error ? err.message : String(err)}`);
+    // Windows taskkill 的 stderr 走 GBK(CP936)，拼 err.message 会在 UTF-8 日志里乱码；
+    // 只记录退出码以保留诊断价值同时避免编码污染。
+    const code = (err as NodeJS.ErrnoException)?.code ?? "unknown";
+    log.error(`[install-detector] kill PID ${pid} failed (exit=${code})`);
     return false;
   }
 }
@@ -273,8 +276,10 @@ async function uninstallWindowsTask(): Promise<void> {
       await execFileAsync("schtasks", ["/Delete", "/F", "/TN", taskName]);
       log.info(`[install-detector] schtasks delete "${taskName}" succeeded`);
     } catch (err) {
-      // 任务不存在时报错是正常的
-      log.info(`[install-detector] schtasks delete "${taskName}": ${err instanceof Error ? err.message : String(err)}`);
+      // 任务不存在时报错是正常的。schtasks 在中文 Windows 上以 GBK(CP936) 输出 stderr，
+      // 直接拼 err.message 会在 UTF-8 日志里出现乱码，所以只记录退出码。
+      const code = (err as NodeJS.ErrnoException)?.code ?? "unknown";
+      log.info(`[install-detector] schtasks delete "${taskName}": skipped (exit=${code})`);
     }
   }
 
