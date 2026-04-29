@@ -203,6 +203,23 @@ export interface BackupData {
   backups: BackupEntry[];
 }
 
+export interface SessionUsageRow {
+  agent: string;
+  sessionId: string;
+  customLabel: string | null;
+  originLabel: string | null;
+  updatedAt: number;
+  input: number | null;
+  output: number | null;
+  cacheRead: number | null;
+  outputUnsupported: boolean;
+  cacheReadUnsupported: boolean;
+}
+
+export interface SessionUsageData {
+  rows: SessionUsageRow[];
+}
+
 export interface AboutInfo {
   oneClawVersion: string;
   openClawVersion: string;
@@ -334,6 +351,7 @@ interface OneClawBridgeExtended {
       settingsGetDefaultBrowserName?: () => Promise<any>;
       // Settings: Backup
       settingsListConfigBackups?: () => Promise<any>;
+      settingsListSessionUsage?: () => Promise<any>;
       settingsRestoreConfigBackup?: (params: Record<string, unknown>) => Promise<any>;
       settingsRestoreLastKnownGood?: () => Promise<any>;
       settingsResetConfigAndRelaunch?: () => Promise<any>;
@@ -707,6 +725,10 @@ export async function settingsRestoreLastKnownGood(): Promise<void> {
 
 export async function settingsResetConfigAndRelaunch(): Promise<void> {
   unwrapVoid(await oc().settingsResetConfigAndRelaunch());
+}
+
+export async function settingsListSessionUsage(): Promise<SessionUsageData> {
+  return unwrapData<SessionUsageData>(await oc().settingsListSessionUsage());
 }
 
 // ---------------------------------------------------------------------------
