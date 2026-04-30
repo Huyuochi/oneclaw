@@ -206,6 +206,7 @@ export interface BackupData {
 export interface SessionUsageRow {
   agent: string;
   sessionId: string;
+  isMain: boolean;
   customLabel: string | null;
   originLabel: string | null;
   updatedAt: number;

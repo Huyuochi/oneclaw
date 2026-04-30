@@ -314,6 +314,9 @@ const dict: Record<Locale, Record<string, string>> = {
     "settings.sessionUsage.tokenCacheRead": "缓存读",
     "settings.sessionUsage.unsupported": "暂不支持",
     "settings.sessionUsage.unlabeled": "（无自定义标签）",
+    "settings.sessionUsage.mainBadge": "主会话",
+    "settings.sessionUsage.totals.label": "总Token用量",
+    "settings.sessionUsage.totals.partial": "（部分会话不支持）",
 
     // Settings: About
     "settings.about.version": "版本信息",
@@ -876,6 +879,9 @@ const dict: Record<Locale, Record<string, string>> = {
     "settings.sessionUsage.tokenCacheRead": "cacheR",
     "settings.sessionUsage.unsupported": "n/a",
     "settings.sessionUsage.unlabeled": "(no custom label)",
+    "settings.sessionUsage.mainBadge": "Main",
+    "settings.sessionUsage.totals.label": "Total Token Usage",
+    "settings.sessionUsage.totals.partial": "(some unsupported)",
 
     // Settings: About
     "settings.about.version": "Version",

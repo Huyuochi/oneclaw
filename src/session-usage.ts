@@ -9,6 +9,7 @@ const MAX_ROWS = 200;
 export type SessionUsageRow = {
   agent: string;
   sessionId: string;
+  isMain: boolean;
   customLabel: string | null;
   originLabel: string | null;
   updatedAt: number;
@@ -392,7 +393,7 @@ async function aggregateUsage(sessionFile: string, estimateTokens: EstimateToken
   return totals;
 }
 
-async function readAgentIndex(agentDir: string): Promise<Array<{ agent: string; agentDir: string; entry: IndexEntry }>> {
+async function readAgentIndex(agentDir: string): Promise<Array<{ agent: string; agentDir: string; sessionKey: string; entry: IndexEntry }>> {
   const indexPath = path.join(agentDir, "sessions", "sessions.json");
   let raw: string;
   try {
@@ -408,11 +409,19 @@ async function readAgentIndex(agentDir: string): Promise<Array<{ agent: string; 
   }
   if (!parsed || typeof parsed !== "object") return [];
   const agent = path.basename(agentDir);
-  const out: Array<{ agent: string; agentDir: string; entry: IndexEntry }> = [];
-  for (const entry of Object.values(parsed as Record<string, IndexEntry>)) {
-    if (entry && typeof entry === "object") out.push({ agent, agentDir, entry });
+  const out: Array<{ agent: string; agentDir: string; sessionKey: string; entry: IndexEntry }> = [];
+  for (const [sessionKey, entry] of Object.entries(parsed as Record<string, IndexEntry>)) {
+    if (entry && typeof entry === "object") out.push({ agent, agentDir, sessionKey, entry });
   }
   return out;
+}
+
+function isMainSessionKey(sessionKey: string, agent: string): boolean {
+  // Default main session key shape is `agent:<agentId>:main` (see openclaw routing/session-key.ts).
+  // Without runtime config we only check the default mainKey "main"; that covers the overwhelming
+  // majority of users — anyone with a custom mainKey simply won't see the badge.
+  const lower = sessionKey.toLowerCase();
+  return lower === `agent:${agent.toLowerCase()}:main` || lower === "main";
 }
 
 export async function listSessionUsage(): Promise<SessionUsageRow[]> {
@@ -436,13 +445,14 @@ export async function listSessionUsage(): Promise<SessionUsageRow[]> {
   const estimateTokens = await loadEstimateTokens();
 
   const rows = await Promise.all(
-    capped.map(async ({ agent, agentDir, entry }): Promise<SessionUsageRow> => {
+    capped.map(async ({ agent, agentDir, sessionKey, entry }): Promise<SessionUsageRow> => {
       const sessionId = asString(entry.sessionId)!;
       const sessionFile = asString(entry.sessionFile) ?? path.join(agentDir, "sessions", `${sessionId}.jsonl`);
       const totals = await aggregateUsage(sessionFile, estimateTokens);
       return {
         agent,
         sessionId,
+        isMain: isMainSessionKey(sessionKey, agent),
         customLabel: asString(entry.label),
         originLabel: asString(entry.origin?.label),
         updatedAt: asNumber(entry.updatedAt),
