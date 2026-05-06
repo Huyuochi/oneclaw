@@ -83,8 +83,9 @@ oneclaw/
 │   ├── lucide-sprite.generated.js  # Icon sprites
 │   └── share-copy-content.json     # Fallback share copy content
 ├── builtin-skills/         # OneClaw-owned skills, bundled into app and copied to ~/.openclaw/workspace/skills/ on first launch
-│   ├── env-setup/          # Install uv + Python + PyPI deps with CN/INTL mirror auto-selection
-│   └── document-pro/       # PDF/DOCX/PPTX/XLSX extraction guide
+│   ├── officecli-docx/     # DOCX read/write skill backed by bundled OfficeCLI binary
+│   ├── officecli-pptx/     # PPTX read/write skill backed by bundled OfficeCLI binary
+│   └── officecli-xlsx/     # XLSX read/write skill backed by bundled OfficeCLI binary
 ├── scripts/
 │   ├── package-resources.js    # Downloads Node.js 22 + installs openclaw from npm
 │   ├── afterPack.js            # electron-builder hook: injects resources post-strip
