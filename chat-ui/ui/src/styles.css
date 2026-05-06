@@ -7836,6 +7836,8 @@ img.chat-avatar {
 .fixed-tooltip--wide {
   padding: 8px 10px;
   line-height: 1.45;
+  max-width: min(700px, calc(100vw - 24px));
+  width: max-content;
 }
 
 .workspace__header-btn svg {

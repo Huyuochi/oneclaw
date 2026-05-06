@@ -155,7 +155,7 @@ function renderContextMeter(
   const label = contextMeterText("chat.contextMeterAria", values);
   const title = contextMeterText("chat.contextMeterHint", values);
   return html`
-    <div class="chat-compose__ctx-meter" title=${title} data-tooltip=${title} data-tooltip-wide="true">
+    <div class="chat-compose__ctx-meter" data-tooltip=${title} data-tooltip-wide="true">
       <div
         class="chat-compose__ctx-meter-bar"
         role="progressbar"
