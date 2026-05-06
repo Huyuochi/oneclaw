@@ -28,9 +28,9 @@ Choose colors that match your topic -- don't default to generic blue:
 
 Use **Text** for body copy on light backgrounds, **Muted** for captions, labels, and axis text. On dark backgrounds, use the Secondary or `FFFFFF` for body text and Muted for captions.
 
-> **深色背景对比度规则（Hard Rule H6 补充）**：当 slide 背景为深色（填充亮度 < 30%，如 `1E2761`、`36454F`、`000000` 等）时，所有正文文字、卡片 body text、图表系列颜色和图标填充**必须**使用白色（`FFFFFF`）或近白色（亮度 > 80%）。
-> **严禁**在深色背景上使用中性灰或低饱和色调（如 `6B7B8D`，亮度约 44%）作为 body text 颜色——这类颜色在深色背景上对比度不足，在演示现场尤为明显。
-> 验证方法：在完成深色背景 slide 后，用 `view html --browser` 或视觉 QA 子代理确认所有文字和元素清晰可辨。
+> **Dark background contrast rule (Hard Rule H6 supplement)**: when the slide background is dark (fill luminance < 30%, e.g. `1E2761`, `36454F`, `000000`), all body text, card body text, chart series colors, and icon fills **must** use white (`FFFFFF`) or near-white (luminance > 80%).
+> **Never** use neutral gray or low-saturation tones (e.g. `6B7B8D`, ~44% luminance) as body text on dark backgrounds — contrast is insufficient and especially obvious in a live presentation.
+> Verification: after finishing a dark-background slide, use `view html --browser` or a visual-QA subagent to confirm all text and elements are clearly readable.
 
 **Need a color not in the table?** These palettes are starting points. You can add accent colors (e.g., gold `D4A843` with Forest & Moss) or blend palettes to match the topic. If a user requests a palette that doesn't exist by name (e.g., "Forest & Gold"), use the closest match and supplement with appropriate accent tones.
 
@@ -53,39 +53,39 @@ Use **Text** for body copy on light backgrounds, **Muted** for captions, labels,
 |---------|------|
 | Slide title | 36-44pt bold |
 | Section header | 20-24pt bold |
-| Body text | **16-20pt**（最小 16pt；绝不低于 16pt） |
+| Body text | **16-20pt** (minimum 16pt; never lower) |
 | Captions | 10-12pt muted |
 
-> **Hard Rule H4**：body text 最低 **16pt**，无任何例外。
-> 卡片内正文、多列内容、bullet points 一律不低于 16pt。
-> 「内容放不下」不是低于 16pt 的理由——应减少文字、拆分 slide，或减少卡片数量。
-> 仅以下非主读元素允许 < 16pt：图表轴标签、图例、脚注、KPI 数字下方的说明标注（sublabel）。
+> **Hard Rule H4**: body text minimum **16pt**, no exceptions.
+> Card body, multi-column content, and bullet points are all ≥ 16pt.
+> "Content doesn't fit" is not a reason to drop below 16pt — cut text, split the slide, or reduce card count.
+> Only these non-primary elements may be < 16pt: chart axis labels, legends, footnotes, and the sublabel beneath a KPI number.
 >
-> **KPI sublabel 例外的适用范围**：仅限 ≤5 个词的短标注（如 "Active users"、"MoM growth"、"Q3 2025"）。
-> 若 sublabel 是完整的描述性句子（如 "Compared to last quarter's baseline figure"），则不适用此例外，必须使用 ≥16pt 正文或删除该文字。
+> **Scope of the KPI sublabel exception**: only ≤5-word captions (e.g. "Active users", "MoM growth", "Q3 2025").
+> If a sublabel is a full descriptive sentence (e.g. "Compared to last quarter's baseline figure"), the exception does not apply — use ≥16pt body text or remove the text.
 
-> **Hard Rule H7**：所有内容 slide（非封面、非结尾 slide）**必须**包含演讲者备注（speaker notes）。
-> 使用 `officecli add deck.pptx /slide[N] --type notes --prop text="..."` 为每张内容 slide 添加备注。
-> 缺少 speaker notes 的内容 slide 是交付硬性失败项。
+> **Hard Rule H7**: every content slide (non-cover, non-closing) **must** include speaker notes.
+> Use `officecli add deck.pptx /slide[N] --type notes --prop text="..."` to add notes to each content slide.
+> A content slide missing speaker notes is a hard delivery failure.
 
 ## Layout Variety
 
 **Every slide needs a non-text visual element** — shape, color block, chart, icon, or graphic. Text-only slides are forgettable and violate delivery standards.
 
-### 无图片场景的视觉设计清单（CLI 限制下的替代方案）
+### Visual design checklist for image-free decks (CLI-friendly alternatives)
 
-officecli 不依赖外部图片文件即可实现丰富视觉效果。当无可用图片文件时，必须从以下至少一种方式中选取视觉元素：
+officecli can produce rich visuals without any external image files. When no image is available, pick at least one of the following:
 
-| 方式 | 实现方法 | 适用场景 |
+| Technique | How | Best for |
 |------|---------|---------|
-| **色块背景** | `--type shape --prop fill=COLOR --prop preset=roundRect` | 卡片、强调区块 |
-| **渐变 slide 背景** | `--prop "background=COLOR1-COLOR2-180"` | Section dividers、title slides |
-| **Icon in circle** | 彩色 ellipse + 文字/数字居中叠加（见 creating.md）| 功能列表、流程步骤 |
-| **大字号统计数字** | `--prop size=64 --prop bold=true`（60-72pt 数字）+ 小标签 | KPI、stats slides |
-| **图表** | `--type chart`（column/pie/line 等） | 数据展示 slides |
-| **形状组合** | circles + connectors + arrows 构建图表/流程 | 架构图、时间线 |
+| **Color block background** | `--type shape --prop fill=COLOR --prop preset=roundRect` | Cards, emphasis regions |
+| **Gradient slide background** | `--prop "background=COLOR1-COLOR2-180"` | Section dividers, title slides |
+| **Icon in circle** | Colored ellipse + centered text/number (see creating.md) | Feature lists, process steps |
+| **Large stat numbers** | `--prop size=64 --prop bold=true` (60-72pt numbers) + small label | KPI, stats slides |
+| **Charts** | `--type chart` (column / pie / line, etc.) | Data slides |
+| **Composed shapes** | circles + connectors + arrows to build diagrams/flows | Architecture diagrams, timelines |
 
-**强制 checkpoint**：每 3 张 content slide 中，至少 1 张必须包含上述非文字视觉元素（色块/图形/图表）。纯文字 slide 仅允许在以下情况使用：引用（quote）、代码示例（code）、纯表格 slide。
+**Required checkpoint**: at least 1 of every 3 content slides must include one of the above non-text visual elements (color block / shape / chart). Text-only slides are allowed only for quotes, code examples, or pure tables.
 
 Vary across these layout types:
 - Two-column (text left, visual right)

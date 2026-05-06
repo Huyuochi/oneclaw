@@ -17,15 +17,15 @@ metadata:
 ## BEFORE YOU START (CRITICAL)
 
 > [!CAUTION]
-> **zsh 用户（macOS 默认 shell）**：所有含方括号的路径参数**必须加引号**，否则 zsh 会 glob 展开并报错 `zsh: no matches found`。
-> - 正确：`officecli set deck.pptx '/slide[1]'` 或 `"/slide[1]"`
-> - 错误：`officecli set deck.pptx /slide[1]`（zsh 会展开 `[1]`）
+> **zsh users (default shell on macOS)**: any path argument containing brackets **must be quoted**, or zsh glob-expands it and fails with `zsh: no matches found`.
+> - Correct: `officecli set deck.pptx '/slide[1]'` or `"/slide[1]"`
+> - Wrong: `officecli set deck.pptx /slide[1]` (zsh expands `[1]`)
 >
-> **这是首次使用时几乎必然触发的错误。** 验证引号是否生效：
+> **This is the most common first-use failure.** Verify quoting works:
 > ```bash
-> officecli get deck.pptx '/slide[1]' --depth 1   # 正确（有引号）
+> officecli get deck.pptx '/slide[1]' --depth 1   # correct (quoted)
 > ```
-> 如果看到 `no matches found`，说明引号缺失。
+> If you see `no matches found`, quotes are missing.
 
 **officecli is pre-installed.** Verify: `officecli --version`
 
@@ -47,15 +47,16 @@ metadata:
 
 ## Execution Model
 
-**Run commands one at a time. Do not write all commands into a shell script and execute it as a single block.**
+**Use interactive checkpoints. For repetitive edits, prefer small `officecli batch` chunks instead of hundreds of separate tool calls. Do not write an unobserved shell script and execute it as a single block.**
 
 OfficeCLI is incremental: every `add`, `set`, and `remove` immediately modifies the file and returns output. Use this to catch errors early:
 
-1. **One command at a time, then read the output.** Check the exit code before proceeding.
-2. **Non-zero exit = stop and fix immediately.** Do not continue building on a broken state.
-3. **Verify after structural operations.** After adding a slide, chart, table, or animation, run `get` or `validate` before building on top of it.
+1. **Structural or risky operation: one command, then read the output.** Check the exit code before proceeding.
+2. **Repetitive low-risk edits: use `officecli batch` in small chunks (8-12 ops).** Read the batch output before the next chunk.
+3. **Non-zero exit = stop and fix immediately.** Do not continue building on a broken state.
+4. **Verify after structural operations.** After adding a slide, chart, table, or animation, run `get` or `validate` before building on top of it.
 
-Running a 50-command script all at once means the first error cascades silently through every subsequent command. Running incrementally means the failure context is immediate and local — fix it and move on.
+Running a 50-command script all at once means the first error cascades silently through every subsequent command. Small observed batch chunks keep failure context local while avoiding unnecessary tool turns.
 
 ---
 
@@ -76,7 +77,7 @@ officecli view slides.pptx outline
 
 Output shows slide titles, shape counts, and picture counts per slide.
 
-**注意：`view outline` 不计入表格和图表**——含表格/图表的 slide 显示为 "1 text box(es)"，shape count 偏低。如需完整结构清单（含表格行列数和图表类型），请使用：
+**Note: `view outline` does not count tables or charts** — slides containing tables/charts show as "1 text box(es)", so the shape count is understated. For a full structural listing (including table dimensions and chart types), use:
 ```bash
 officecli view slides.pptx annotated
 ```
@@ -155,11 +156,11 @@ officecli view slides.pptx html --browser
 
 **Hard rules:**
 
-- **H4 — Body text minimum 16pt, no exceptions.** 卡片内正文、多列内容、bullet points 一律不低于 16pt。「内容放不下」不是低于 16pt 的理由——应减少文字、拆分 slide，或减少卡片数量。仅以下非主读元素允许 < 16pt：图表轴标签、图例、脚注、KPI sublabel（≤5 词的短标注，如 "Active users"、"MoM growth"）。
-- **H6 — Dark background contrast.** 当 slide 背景为深色（亮度 < 30%）时，所有文字必须使用白色（`FFFFFF`）或近白色（亮度 > 80%）。严禁在深色背景上使用中性灰或低饱和色调作为 body text。
-- **H7 — Speaker notes required.** 所有内容 slide（非封面、非结尾）必须包含 speaker notes。缺少 notes 的内容 slide 是交付硬性失败项。
+- **H4 — Body text minimum 16pt, no exceptions.** Card body, multi-column content, and bullet points must all be ≥ 16pt. "Content doesn't fit" is not a reason to drop below 16pt — reduce text, split the slide, or remove cards. Only these non-primary elements may be < 16pt: chart axis labels, legends, footnotes, KPI sublabels (≤5-word captions, e.g. "Active users", "MoM growth").
+- **H6 — Dark background contrast.** When the slide background is dark (luminance < 30%), all text must use white (`FFFFFF`) or near-white (luminance > 80%). Never use neutral gray or low-saturation tones as body text on dark backgrounds.
+- **H7 — Speaker notes required.** All content slides (non-cover, non-closing) must include speaker notes. A content slide missing notes is a hard delivery failure.
 
-**Visual element checkpoint:** 每 3 张 content slide 中，至少 1 张必须包含非文字视觉元素（色块/图形/图表）。纯文字 slide 仅允许在引用、代码示例、纯表格场景使用。
+**Visual element checkpoint:** at least 1 of every 3 content slides must include a non-text visual element (color block / shape / chart). Text-only slides are allowed only for quotes, code examples, or pure tables.
 
 **Never use accent lines under titles** — these are a hallmark of AI-generated slides; use whitespace or background color instead.
 
@@ -180,7 +181,7 @@ officecli validate slides.pptx           # Schema validation
 officecli view slides.pptx html --browser  # Visual inspection
 ```
 
-> **注意：`view text` 不提取表格内的文本。** 如需验证表格内容，请使用 `officecli get deck.pptx '/slide[N]/table[M]' --json`。
+> **Note: `view text` does not extract text inside tables.** To verify table content, use `officecli get deck.pptx '/slide[N]/table[M]' --json`.
 
 > **`view issues` "Slide has no title"** warnings are expected and safe to ignore when using `layout=blank`.
 
@@ -199,7 +200,7 @@ Full QA procedures and pre-delivery checklist: [reference/qa-checklist.md](refer
 | `x=-3cm` | Negative coordinates **are supported** and can be used for bleed effects (e.g., `x=-2cm` lets a decorative element overflow the left edge). |
 | `/shape[myname]` | Name indexing not supported. Use numeric index: `/shape[3]` |
 | Guessing property names | Run `officecli pptx set shape` to see exact names |
-| `\n`/`\\` in shell strings & code slides | 普通文本 shape：使用 `\\n` 表示换行，如 `--prop text="line1\\nline2"`。<br>**代码 slide 特别注意**：`--prop text="kubectl apply \\n  -f pod.yaml"` 会在 slide 上显示字面量 `\\n`（而非换行）。对于演示用代码内容，使用单个 `\n` 实现真实换行：`--prop text="line1\nline2"`。但在 shell 单引号字符串中 `\n` 是字面量；建议使用 heredoc 或 JSON batch 传递带换行的代码文本，以避免 shell 转义问题。 |
+| `\n`/`\\` in shell strings & code slides | Plain text shape: use `\\n` for a line break, e.g. `--prop text="line1\\nline2"`.<br>**For code slides**: `--prop text="kubectl apply \\n  -f pod.yaml"` renders the literal `\\n` (not a line break). For code content, use a single `\n` for a real line break: `--prop text="line1\nline2"`. Note that in shell single-quoted strings `\n` is literal — prefer a heredoc or JSON batch to pass multiline code and avoid shell-escape issues. |
 | Modifying an open file | Close the file in PowerPoint/WPS first |
 | Hex colors with `#` | Use `FF0000` not `#FF0000` -- no hash prefix |
 | Theme colors | Use `accent1`..`accent6`, `dk1`, `dk2`, `lt1`, `lt2` -- not hex |
@@ -232,8 +233,8 @@ Use this pattern for every presentation build, regardless of command count.
 Batch is a separate, independent mechanism — use it to collapse many operations into one API call:
 
 ```bash
-# ⚠️ zsh 注意：batch 模式中 JSON path 字段（如 "/slide[1]"）已包含引号，无需额外处理。
-# 但在非 batch 的直接命令中，路径参数 /slide[1] 必须加引号，否则 zsh 报错。
+# ⚠️ zsh note: in batch mode, JSON path fields (e.g. "/slide[1]") are already quoted in the JSON, so no extra escaping is needed.
+# But for non-batch direct commands, /slide[1] must be quoted on the shell, or zsh will error out.
 cat <<'EOF' | officecli batch slides.pptx
 [
   {"command":"add","parent":"/slide[1]","type":"shape","props":{"text":"Title","x":"2cm","y":"2cm","width":"20cm","height":"3cm","size":"36","bold":"true"}},

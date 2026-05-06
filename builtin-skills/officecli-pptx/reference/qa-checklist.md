@@ -13,9 +13,9 @@ Your first render is almost never correct. Approach QA as a bug hunt, not a conf
 officecli view slides.pptx text
 ```
 
-> **注意：`view text` 不提取表格 (table) 内的文本。** 如需验证表格内容，请使用
-> `officecli get deck.pptx '/slide[N]/table[M]' --json` 检查各单元格内容。
-> 对于 QBR、技术规范等大量使用表格的幻灯片，仅靠 `view text` 会产生 QA 盲区。
+> **Note: `view text` does not extract text inside tables.** To verify table content, use
+> `officecli get deck.pptx '/slide[N]/table[M]' --json` and check each cell.
+> For table-heavy decks (QBRs, technical specs), `view text` alone leaves a QA blind spot.
 
 ```bash
 # Check for structural and formatting issues automatically
@@ -87,24 +87,24 @@ officecli validate slides.pptx
 
 Before declaring a presentation complete, verify:
 
-- [ ] **（Hard Rule H7）Speaker notes 验证**：使用 `officecli view deck.pptx annotated` 确认每张内容 slide（非封面、非结尾）均有 speaker notes 条目。缺少 notes 的内容 slide 是交付硬性失败项。
+- [ ] **(Hard Rule H7) Speaker notes verification**: use `officecli view deck.pptx annotated` to confirm every content slide (non-cover, non-closing) has a speaker-notes entry. A content slide missing notes is a hard delivery failure.
 - [ ] At least one transition style applied (fade for title, push or wipe for content)
 - [ ] Alt text on all pictures
 - [ ] At least 3 different layout types used across slides
 - [ ] No two consecutive slides share the same layout pattern
 - [ ] `view issues` "Slide has no title" warnings — **expected and safe to ignore** when using `layout=blank`. All custom designs use blank layout; these warnings are not real issues.
-- [ ] **溢出检查（每张 slide 必做）**：对每张 slide 上的所有文字框和形状，确认 `y + height ≤ 19.05cm`（标准 widescreen 高度）且 `x + width ≤ 33.87cm`（标准宽度）。如有溢出，调小字号或缩短文本，**不得依赖截断**。
-- [ ] **卡片布局逐格溢出检查**：对多卡片布局（step cards、feature grids、timeline flows），逐张卡片验证 `y + height ≤ 19.05cm`。使用 `officecli get deck.pptx '/slide[N]/shape[M]'` 逐一检查每张卡片——不得基于卡片数量估算，必须逐格测量。
-- [ ] **Agenda 一致性**：如有 Agenda/TOC slide，确认其列出的所有 section 与实际 slide 标题和顺序完全一致，不得遗漏任何 section。
-- [ ] **字号合规（Hard Rule H4）**：所有 body text、卡片正文、bullet points、多列内容的字号 ≥ 16pt。允许 < 16pt 的例外仅限：图表轴标签、图例、KPI sublabel（≤5 词的短标注）、脚注。
+- [ ] **Overflow check (required for every slide)**: for every text box and shape on every slide, confirm `y + height ≤ 19.05cm` (standard widescreen height) and `x + width ≤ 33.87cm` (standard width). If anything overflows, shrink the font or shorten the text — **never rely on truncation**.
+- [ ] **Per-card overflow check**: for multi-card layouts (step cards, feature grids, timeline flows), verify `y + height ≤ 19.05cm` on each card individually. Use `officecli get deck.pptx '/slide[N]/shape[M]'` to inspect every card — never estimate from card count, always measure each one.
+- [ ] **Agenda consistency**: if there is an Agenda/TOC slide, confirm every section it lists matches the actual slide titles and order exactly, with no missing sections.
+- [ ] **Font-size compliance (Hard Rule H4)**: all body text, card body, bullet points, and multi-column content must be ≥ 16pt. Sizes < 16pt are permitted only for: chart axis labels, legends, KPI sublabels (≤5-word captions), and footnotes.
 
-> **Hard Rule H4 澄清**：body text ≥ 16pt 无例外。若内容放不下，
-> 解决方案是减少文字或拆分 slide，而非缩小字号。
-> 允许 < 16pt 的例外：图表轴标签、图例、KPI sublabel（**仅限 ≤5 词的短标注**，如 "Active users"、"MoM growth"；完整描述性句子不适用此例外）、脚注。
+> **Hard Rule H4 clarification**: body text ≥ 16pt, no exceptions. If content doesn't fit,
+> the fix is to cut text or split the slide — not shrink the font.
+> Permitted < 16pt exceptions: chart axis labels, legends, KPI sublabels (**only ≤5-word captions**, e.g. "Active users", "MoM growth"; full descriptive sentences do not qualify), and footnotes.
 
-- [ ] **图表标题无空占位符**：所有图表标题不得含有 `()`、`[]`、`TBD`、`XXX` 等空占位符。
-      若标题包含动态内容（如单位 `$M`），必须在 QA 阶段替换为实际值。
-      检查命令：`officecli view slides.pptx text` 然后搜索 `"()"`.
+- [ ] **No empty placeholders in chart titles**: chart titles must not contain `()`, `[]`, `TBD`, `XXX`, or similar empty placeholders.
+      If a title includes dynamic content (such as a `$M` unit), replace it with the actual value during QA.
+      Check command: `officecli view slides.pptx text`, then search for `"()"`.
 
 ## Verification Loop
 

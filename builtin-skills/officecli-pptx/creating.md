@@ -15,46 +15,46 @@ Use this guide when creating a new presentation with no template.
 
 ---
 
-## A. Visual Elements Strategy（必读）
+## A. Visual Elements Strategy (required reading)
 
-**officecli 不需要外部图片文件**即可制作视觉丰富的演示文稿。当无图片文件可用时，使用以下策略实现"非文字视觉元素"要求。
+**officecli does not require external image files** to produce visually rich decks. When no images are available, use the strategies below to satisfy the "non-text visual element" requirement.
 
-> **强制要求**：每 3 张 content slide 中，至少 1 张必须包含以下非文字视觉元素之一。纯文字 slide 只允许用于引用（quote）、代码示例、纯表格。
+> **Mandatory**: at least 1 of every 3 content slides must include one of the non-text visual elements below. Text-only slides are permitted only for quotes, code examples, or pure tables.
 
-### 视觉元素类型及实现方式
+### Visual element types and how to build them
 
-**1. Icon in Colored Circle（最通用）**
+**1. Icon in Colored Circle (most versatile)**
 ```bash
-# 彩色圆形背景
+# Colored circle background
 officecli add slides.pptx /slide[N] --type shape --prop preset=ellipse --prop fill=1E2761 --prop x=2cm --prop y=5cm --prop width=2.5cm --prop height=2.5cm --prop line=none
-# 中心文字（数字、emoji、字母均可）
+# Centered text (number, emoji, or letter)
 officecli add slides.pptx /slide[N] --type shape --prop text="01" --prop x=2cm --prop y=5cm --prop width=2.5cm --prop height=2.5cm --prop fill=none --prop color=FFFFFF --prop size=16 --prop bold=true --prop align=center --prop valign=center
 ```
 
-**2. 色块强调区（filled rectangle/roundRect）**
+**2. Color block emphasis (filled rectangle / roundRect)**
 ```bash
-# 作为背景色块或分隔条
+# Use as background block or divider bar
 officecli add slides.pptx /slide[N] --type shape --prop preset=roundRect --prop x=2cm --prop y=4cm --prop width=14cm --prop height=12cm --prop fill=E8EDF3 --prop line=CADCFC --prop lineWidth=1pt
 ```
 
-**3. 大字号统计数字（Stats callout）**
+**3. Large stat callout**
 ```bash
-# 60-72pt 数字 + 小标签 = 数字本身就是视觉元素
+# 60-72pt number + small label — the number itself is the visual element
 officecli add slides.pptx /slide[N] --type shape --prop text="94%" --prop x=2cm --prop y=5cm --prop width=9cm --prop height=4cm --prop font=Georgia --prop size=64 --prop bold=true --prop color=CADCFC --prop align=center --prop fill=none
 ```
 
-**4. 图表**
+**4. Chart**
 ```bash
-# 任意图表类型均可作为视觉元素
+# Any chart type works as a visual element
 officecli add slides.pptx /slide[N] --type chart --prop chartType=column --prop categories="Q1,Q2,Q3,Q4" --prop series1="Revenue:42,58,65,78" --prop x=2cm --prop y=4cm --prop width=20cm --prop height=12cm --prop colors=1E2761,CADCFC
 ```
 
-**5. 渐变背景（Section/Title slides）**
+**5. Gradient background (section / title slides)**
 ```bash
 officecli set slides.pptx /slide[N] --prop "background=1E2761-CADCFC-180"
 ```
 
-**Visual checkpoint**：在完成每 3 张 slide 后，运行 `officecli view slides.pptx outline` 检查 picture count + shape count，确保非文字元素存在。
+**Visual checkpoint**: after every 3 slides, run `officecli view slides.pptx outline` to check picture and shape counts and confirm non-text elements are present.
 
 ---
 
@@ -191,16 +191,16 @@ officecli add slides.pptx /slide[6] --type shape --prop "text=Automated pipeline
 
 **Z-order tip:** When adding card backgrounds (roundRect) and then text on top, always add the background shape first. If shapes overlap incorrectly, fix with `--prop zorder=back` on the background shape or `--prop zorder=front` on the text shape.
 
-> **多卡片布局逐格溢出验证（必做）**：在完成任何卡片式布局（step cards、feature grids、before/after 对比卡、timeline flows）后，**逐张卡片**检查溢出，而非整体估算。
+> **Per-card overflow verification (required)**: after building any card layout (step cards, feature grids, before/after pairs, timeline flows), check overflow **on each card individually**, not by estimating the layout as a whole.
 >
 > ```bash
-> # 逐一检查每张卡片的形状坐标
+> # Inspect each card's shape coordinates one by one
 > officecli get slides.pptx '/slide[N]/shape[M]'
 > ```
 >
-> 对每张卡片，确认：`y + height ≤ 19.05cm`（垂直不溢出）且 `x + width ≤ 33.87cm`（水平不溢出）。
+> For every card, confirm `y + height ≤ 19.05cm` (no vertical overflow) and `x + width ≤ 33.87cm` (no horizontal overflow).
 >
-> **不得基于卡片数量或布局规律估算**——必须逐格测量。卡片内容通常比预期更高（文字折行、padding 叠加），估算往往低估实际高度。如发现溢出：缩小字号、减少卡片内文字行数、或上移所有卡片的起始 y 坐标。
+> **Never estimate from card count or layout regularity** — measure each card. Card contents are usually taller than expected (line wrap, stacked padding) and estimates routinely underestimate the real height. If overflow appears: shrink fonts, cut lines per card, or raise the starting y for every card.
 
 ### Section Divider
 
@@ -298,18 +298,18 @@ officecli add slides.pptx /slide[1] --type picture --prop src=icon.svg --prop x=
 
 For icon + text rows, repeat the pattern at consistent vertical intervals (e.g., y=5cm, y=8.5cm, y=12cm) with a bold label and description text box to the right of each circle.
 
-**Overflow check（每张 slide 必做）：** 标准 widescreen 尺寸为 **33.87cm × 19.05cm**。
+**Overflow check (required for every slide):** standard widescreen is **33.87cm × 19.05cm**.
 
-- 垂直：`y + height ≤ 19.05cm`（超出则内容被裁切）
-- 水平：`x + width ≤ 33.87cm`（超出则内容溢出右边）
+- Vertical: `y + height ≤ 19.05cm` (otherwise content is cut off)
+- Horizontal: `x + width ≤ 33.87cm` (otherwise content overflows the right edge)
 
-示例检查：如果某行高 2cm 且从 y=17.5cm 开始，则末端在 19.5cm —— 超出 slide 底边 0.45cm，**必须修正**。处理方式：调小字号、减少行数、或将第一行上移。**不得依赖 PowerPoint 的自动截断**——被截断的内容在演示时完全不可见。
+Example: a 2cm-tall row starting at y=17.5cm ends at 19.5cm — 0.45cm past the slide's bottom edge, **which must be fixed**. Resolve by shrinking the font, reducing line count, or moving the first row up. **Never rely on PowerPoint's auto-truncation** — truncated content is completely invisible during the live presentation.
 
-在完成每张 slide 的所有 shape 后，运行以下命令验证：
+After placing every shape on a slide, verify with:
 ```bash
 officecli get slides.pptx '/slide[N]' --depth 1
 ```
-检查每个 shape 的 `y`/`height`/`x`/`width` 数值，确认均在范围内。
+Check each shape's `y`/`height`/`x`/`width` to confirm all are in range.
 
 ### Aligning & Distributing Shapes
 
@@ -472,14 +472,14 @@ Key styling properties:
 officecli set slides.pptx "/slide[1]/chart[1]" --prop gap=80
 ```
 
-#### 深色背景图表配方（Dark Slide + Chart）
+#### Dark Slide + Chart recipe
 
 > [!CAUTION]
-> **当 slide 背景为深色（如 `1E2761`、`36454F` 等）时，图表默认使用黑色文字，在深色背景上几乎不可见。**
-> 必须手动设置轴标签、图例、标题颜色为浅色。
+> **When the slide background is dark (e.g. `1E2761`, `36454F`), charts default to black text that is nearly invisible.**
+> You must explicitly set axis labels, legend, and title colors to light shades.
 
 ```bash
-# 深色背景 slide 上的图表 — 必须设置以下颜色属性
+# Chart on a dark-background slide — set the following color properties
 officecli add slides.pptx /slide[N] --type chart \
   --prop chartType=column \
   --prop categories="Q1,Q2,Q3,Q4" \
@@ -496,24 +496,24 @@ officecli add slides.pptx /slide[N] --type chart \
   --prop title.size=14
 ```
 
-深色背景图表配色规则：
-- `axisFont` 和 `legendFont`：使用浅色（如 `CADCFC`、`FFFFFF`）
-- `labelFont`：使用白色或浅色
-- `title.color`：使用白色
-- `gridlines`：使用低透明度白色（如 `FFFFFF:0.2`）而非深色
-- 图表 `series` 颜色：避免深色（如 `1E2761`）；改用高亮色（如 `CADCFC`、`97BC62`）
+Color rules for dark-background charts:
+- `axisFont` and `legendFont`: use light colors (e.g. `CADCFC`, `FFFFFF`)
+- `labelFont`: use white or a light color
+- `title.color`: use white
+- `gridlines`: use low-opacity white (e.g. `FFFFFF:0.2`), not a dark tone
+- Chart `series` colors: avoid dark tones (e.g. `1E2761`); use highlight colors (e.g. `CADCFC`, `97BC62`)
 
-**颜色对齐提示**：officecli 默认使用系统图表颜色（蓝/橙/灰），与自定义 deck 调色板不符。添加图表后，`colors` prop 指定系列颜色以匹配 deck 主题色：
+**Color-alignment tip**: officecli defaults to system chart colors (blue / orange / gray), which won't match a custom deck palette. After adding a chart, set the `colors` prop to align series colors with the deck theme:
 ```bash
-# 与 Midnight Executive 调色板对齐
+# Aligned with the Midnight Executive palette
 --prop colors=CADCFC,1E2761,8899BB
 ```
 
-> **多系列图表量级差异警告**：若同一图表中各系列数值差异超过 5x（如 8,000,000 vs 400,000），
-> 小值系列在默认 Y 轴下几乎不可见。解决方案（按推荐顺序）：
-> 1. 拆分为两张独立图表
-> 2. 将最大绝对值系列改为大字号 KPI callout，其余系列单独图表
-> 3. 在图表说明中标注"图表显示相对比例，绝对值见 KPI callout"
+> **Multi-series magnitude warning**: if series within a chart differ by more than 5x (e.g. 8,000,000 vs 400,000),
+> the smaller series is nearly invisible on the default Y axis. Fixes, in order of preference:
+> 1. Split into two separate charts.
+> 2. Promote the largest series to a big KPI callout and leave the smaller series in their own chart.
+> 3. Annotate the chart: "chart shows relative proportions; absolute values in KPI callout".
 
 #### Multi-Series Column Chart
 
@@ -915,55 +915,55 @@ officecli add slides.pptx /slide[1] --type group --prop shapes=1,2,3 --prop name
 
 ## Final QA & Delivery Checklist
 
-在执行 `officecli close` 和 `officecli validate` 前，逐项确认：
+Before running `officecli close` and `officecli validate`, confirm each of the following:
 
-### 溢出检查（必做，每张 slide）
+### Overflow check (required, every slide)
 
-标准 widescreen：**宽 33.87cm × 高 19.05cm**
+Standard widescreen: **33.87cm wide × 19.05cm tall**
 
 ```bash
-# 检查单张 slide 的所有元素位置
+# Inspect every element on a single slide
 officecli get slides.pptx '/slide[N]' --depth 1
 ```
 
-对每个 shape，手动验证：
-- `y + height ≤ 19.05cm`（底边不溢出）
-- `x + width ≤ 33.87cm`（右边不溢出）
+For every shape, manually verify:
+- `y + height ≤ 19.05cm` (no bottom overflow)
+- `x + width ≤ 33.87cm` (no right-edge overflow)
 
-如有溢出：优先缩小字号或减少内容行数；最后手段才是调整起始位置。
+If anything overflows: shrink the font or cut content lines first; only adjust the starting position as a last resort.
 
-**多卡片布局专项检查**：对包含 step cards、feature grids、before/after 卡片、timeline nodes 的 slide，必须逐张卡片单独检查（不得估算）。使用 `officecli get slides.pptx '/slide[N]/shape[M]'` 对每张卡片的 shape 逐一确认 `y + height ≤ 19.05cm`。
+**Per-card check for multi-card layouts**: for slides containing step cards, feature grids, before/after cards, or timeline nodes, check each card individually (no estimation). Use `officecli get slides.pptx '/slide[N]/shape[M]'` and verify `y + height ≤ 19.05cm` for every card shape.
 
-### Agenda 一致性检查（有 Agenda slide 时必做）
+### Agenda consistency check (required when an Agenda slide exists)
 
-如演示文稿包含 Agenda/TOC/目录 slide：
+If the deck includes an Agenda / TOC / contents slide:
 
-1. 列出实际 slide 结构：
+1. List the actual slide structure:
    ```bash
    officecli view slides.pptx outline
    ```
 
-2. 对照 Agenda slide 内容，确认：
-   - [ ] Agenda 列出的每个 section 在 deck 中都有对应 slide
-   - [ ] deck 中每个主要 section 都被 Agenda 覆盖（无遗漏）
-   - [ ] section 顺序与 Agenda 顺序一致
+2. Compare it to the Agenda slide and confirm:
+   - [ ] Every section listed on the Agenda has a matching slide in the deck
+   - [ ] Every major section in the deck is covered by the Agenda (no gaps)
+   - [ ] Section order matches the Agenda order
 
-   > **建议**：最后生成 Agenda slide，或在所有 section slide 完成后回来更新 Agenda，避免提前列出未完成的结构。
+   > **Recommendation**: build the Agenda slide last, or come back to update it after all section slides are done — this avoids listing structure that hasn't been built yet.
 
-### 视觉元素覆盖检查
+### Visual element coverage check
 
 ```bash
 officecli view slides.pptx stats
 ```
 
-- 确认 shape count 大于 slide 数量的 2 倍（平均每张 slide ≥ 2 个非文字元素）
-- 如发现连续 3 张以上 slide 无色块/图表/图形，回头为其中至少 1 张补充视觉元素
+- Confirm shape count is more than 2× the slide count (≥ 2 non-text elements per slide on average).
+- If 3+ consecutive slides have no color blocks / charts / shapes, go back and add a visual element to at least one of them.
 
-### 最终验证
+### Final validation
 
 ```bash
 officecli close slides.pptx
 officecli validate slides.pptx
 ```
 
-验证通过后，使用 `view html --browser` 进行最终视觉确认。
+After validation passes, use `view html --browser` for a final visual review.
