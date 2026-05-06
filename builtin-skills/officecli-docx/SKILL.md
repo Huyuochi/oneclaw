@@ -1,6 +1,6 @@
 ---
 name: officecli-docx
-description: "Use this skill when a .docx file is involved — creating, reading, editing, or analyzing Word documents. Triggers on: 'Word doc', 'document', 'report', 'letter', 'memo', 'proposal', or any .docx filename."
+description: "Use this skill when a .docx file is involved — creating, reading, editing, or analyzing Word documents. Triggers on: 'Word doc', 'document', 'report', 'letter', 'memo', 'proposal', or any .docx filename. Drive bulk edits through JSON batch files passed to officecli batch --input; never write Python / Node / Ruby (or other interpreted-language) helper scripts to generate the JSON or wrap CLI calls."
 ---
 
 # OfficeCLI DOCX Skill
@@ -95,7 +95,7 @@ Notes:
 - All strings in the JSON file are UTF-8. Write CJK characters directly — no escaping needed beyond standard JSON rules.
 - Default chunk size: ~50 ops per file. If a chunk fails, drop to 20 and retry.
 - Apply heavy formatting (font, color, complex shading) afterward via targeted `set` calls to keep batch payloads small.
-- **Do not** demonstrate or use here-documents, `cat`-pipe-stdin, text-processing utilities (`awk`/`sed`/`printf`), shell loops, or piping JSON into stdin. The only path is `Write` → `batch --input <file>`.
+- **Do not** demonstrate or use here-documents, `cat`-pipe-stdin, text-processing utilities (`awk`/`sed`/`printf`), shell loops, Python / Node / Ruby helper scripts (or any other interpreted language) to generate the batch JSON or wrap `officecli` calls, or piping JSON into stdin. The only path is `Write` → `batch --input <file>`. Authoring the JSON via a runtime script hides the payload from the conversation, adds an interpreter dependency the host may not have, and re-introduces the encoding pitfalls that batch mode exists to avoid.
 
 ### Inline shortcut: `--commands`
 

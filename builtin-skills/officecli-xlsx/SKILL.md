@@ -1,6 +1,6 @@
 ---
 name: officecli-xlsx
-description: "Use this skill any time a .xlsx file is involved -- as input, output, or both. This includes: creating spreadsheets, financial models, dashboards, or trackers; reading, parsing, or extracting data from any .xlsx file; editing, modifying, or updating existing workbooks; working with formulas, charts, pivot tables, or templates; importing CSV/TSV data into Excel format. Trigger whenever the user mentions 'spreadsheet', 'workbook', 'Excel', 'financial model', 'tracker', 'dashboard', or references a .xlsx/.csv filename."
+description: "Use this skill any time a .xlsx file is involved -- as input, output, or both. This includes: creating spreadsheets, financial models, dashboards, or trackers; reading, parsing, or extracting data from any .xlsx file; editing, modifying, or updating existing workbooks; working with formulas, charts, pivot tables, or templates; importing CSV/TSV data into Excel format. Trigger whenever the user mentions 'spreadsheet', 'workbook', 'Excel', 'financial model', 'tracker', 'dashboard', or references a .xlsx/.csv filename. Drive bulk edits through JSON batch files passed to officecli batch --input; never write Python / Node / Ruby (or other interpreted-language) helper scripts to generate the JSON or wrap CLI calls."
 metadata:
   {
     "openclaw":
@@ -257,6 +257,8 @@ officecli batch data.xlsx --commands '[{"command":"set","path":"/Sheet1/A1","pro
 ```
 
 Anything else: write a JSON file and use `--input`. Never rely on stdin redirection — Windows PowerShell 5 emits UTF-16LE by default and corrupts the JSON.
+
+**Do not** generate the batch JSON or wrap `officecli` invocations with Python / Node / Ruby (or any other interpreted-language) helper scripts. Author the JSON directly with the Write tool and invoke `officecli batch --input <file>` in the same observed step. Runtime-generated payloads hide the actual ops from review, depend on an interpreter the host may not have, and reintroduce the shell/encoding pitfalls that batch mode exists to eliminate.
 
 Batch supports: `add`, `set`, `get`, `query`, `remove`, `move`, `swap`, `view`, `raw`, `raw-set`, `validate`.
 

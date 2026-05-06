@@ -1,6 +1,6 @@
 ---
 name: officecli-pptx
-description: "Use this skill any time a .pptx file is involved -- as input, output, or both. This includes: creating slide decks, pitch decks, or presentations; reading, parsing, or extracting text from any .pptx file; editing, modifying, or updating existing presentations; combining or splitting slide files; working with templates, layouts, speaker notes, or comments. Trigger whenever the user mentions 'deck,' 'slides,' 'presentation,' or references a .pptx filename."
+description: "Use this skill any time a .pptx file is involved -- as input, output, or both. This includes: creating slide decks, pitch decks, or presentations; reading, parsing, or extracting text from any .pptx file; editing, modifying, or updating existing presentations; combining or splitting slide files; working with templates, layouts, speaker notes, or comments. Trigger whenever the user mentions 'deck,' 'slides,' 'presentation,' or references a .pptx filename. Drive bulk edits through JSON batch payloads handed to officecli batch (heredoc or --input); never write Python / Node / Ruby (or other interpreted-language) helper scripts to generate the JSON or wrap CLI calls."
 metadata:
   {
     "openclaw":
@@ -246,6 +246,8 @@ EOF
 Batch supports: `add`, `set`, `get`, `query`, `remove`, `move`, `swap`, `view`, `raw`, `raw-set`, `validate`.
 
 **Batch and resident mode are independent.** Each improves performance on its own. They can be combined, but batch alone (without `open`) already handles the file I/O in one cycle per batch call.
+
+**Do not** generate batch JSON or wrap `officecli` calls with Python / Node / Ruby (or any other interpreted-language) helper scripts. Author the JSON inline (heredoc or Write tool) and invoke `officecli batch` in the same observed step. Runtime-generated payloads hide the ops from review, depend on an interpreter the host may not have, and defeat the small-chunk checkpoint discipline above.
 
 Batch fields: `command`, `path`, `parent`, `type`, `from`, `to`, `index`, `after`, `before`, `props` (dict), `selector`, `mode`, `depth`, `part`, `xpath`, `action`, `xml`.
 
