@@ -73,6 +73,7 @@ function cleanupTab(tabId: string) {
     case "channels": cleanupChannelsTab(); break;
     case "backup": cleanupBackupTab(); break;
     case "about": cleanupAboutTab(); break;
+    case "session-usage": resetSessionUsageTab(); break;
   }
 }
 
