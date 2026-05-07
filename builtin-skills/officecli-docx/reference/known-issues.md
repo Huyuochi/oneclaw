@@ -24,11 +24,10 @@ The `--prop field=page` flag is silently ignored when adding footers. You must a
 # Step 1: Add footer with static text only
 officecli add doc.docx / --type footer --prop text="Page " --prop type=default --prop alignment=center --prop size=9pt
 
-# Step 2: Inject PAGE field via raw-set
-officecli raw-set doc.docx "/footer[1]" \
-  --xpath "//w:p" \
-  --action append \
-  --xml '<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:sz w:val="18"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>'
+# Step 2: Inject PAGE field via raw-set — long raw XML, route through a JSON file (works on macOS / Windows cmd / Windows PowerShell).
+# page-field.json:
+#   [{"command":"raw-set","path":"/footer[1]","xpath":"//w:p","action":"append","xml":"<w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:sz w:val=\"18\"/></w:rPr><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:sz w:val=\"18\"/></w:rPr><w:instrText xml:space=\"preserve\"> PAGE </w:instrText></w:r><w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:sz w:val=\"18\"/></w:rPr><w:fldChar w:fldCharType=\"end\"/></w:r>"}]
+officecli batch doc.docx --input page-field.json
 ```
 
 When a first-page footer also exists, the default footer becomes `footer[2]`.
@@ -95,31 +94,28 @@ officecli raw doc.docx /numbering
 
 **Modify an attribute (e.g., change paragraph alignment):**
 ```bash
-officecli raw-set doc.docx /document \
-  --xpath "//w:body/w:p[1]/w:pPr/w:jc" \
-  --action setattr \
-  --xml "w:val=center"
+officecli raw-set doc.docx /document --xpath "//w:body/w:p[1]/w:pPr/w:jc" --action setattr --xml "w:val=center"
 ```
 
 **Append an element (e.g., add tab stops):**
+
+Any raw XML payload must go through `batch --input` — single-quoted XML on the command line is not portable to Windows cmd / PowerShell.
 ```bash
-officecli raw-set doc.docx /document \
-  --xpath "//w:body/w:p[1]/w:pPr" \
-  --action append \
-  --xml '<w:tabs><w:tab w:val="right" w:pos="9360"/></w:tabs>'
+# tabs.json:
+#   [{"command":"raw-set","path":"/document","xpath":"//w:body/w:p[1]/w:pPr","action":"append","xml":"<w:tabs><w:tab w:val=\"right\" w:pos=\"9360\"/></w:tabs>"}]
+officecli batch doc.docx --input tabs.json
 ```
 
 **Remove an element (e.g., remove a paragraph border causing schema errors):**
 ```bash
-officecli raw-set doc.docx /document \
-  --xpath "//w:body/w:p[3]/w:pPr/w:pBdr" \
-  --action remove
+officecli raw-set doc.docx /document --xpath "//w:body/w:p[3]/w:pPr/w:pBdr" --action remove
 ```
 
 **Internal hyperlink (link to bookmark named "methodology"):**
+
+Long raw XML payload — author hyperlink.json with the Write tool, then run one batch command (the only cross-shell path).
 ```bash
-officecli raw-set doc.docx /document \
-  --xpath "//w:body/w:p[14]" \
-  --action append \
-  --xml '<w:hyperlink w:anchor="methodology"><w:r><w:rPr><w:rStyle w:val="Hyperlink"/><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr><w:t>Methodology</w:t></w:r></w:hyperlink>'
+# hyperlink.json:
+#   [{"command":"raw-set","path":"/document","xpath":"//w:body/w:p[14]","action":"append","xml":"<w:hyperlink w:anchor=\"methodology\"><w:r><w:rPr><w:rStyle w:val=\"Hyperlink\"/><w:color w:val=\"0563C1\"/><w:u w:val=\"single\"/></w:rPr><w:t>Methodology</w:t></w:r></w:hyperlink>"}]
+officecli batch doc.docx --input hyperlink.json
 ```

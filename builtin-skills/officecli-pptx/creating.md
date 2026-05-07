@@ -435,28 +435,37 @@ officecli add slides.pptx /slide[1] --type chart --prop chartType=radar --prop c
 
 #### Modern Chart Styling Recipe
 
-Default charts look dated. Apply these properties for a clean, modern look:
+Default charts look dated. Apply these properties for a clean, modern look. Because there are 18+ props, use a batch file (Write tool):
+
+```json
+[
+  {"command":"add","parent":"/slide[1]","type":"chart","props":{
+    "chartType":"column",
+    "categories":"Q1,Q2,Q3,Q4",
+    "series1":"Revenue:42,58,65,78",
+    "x":"2cm","y":"4cm","width":"29cm","height":"13cm",
+    "colors":"1E2761,CADCFC",
+    "plotFill":"none",
+    "chartFill":"none",
+    "gridlines":"E2E8F0:0.5",
+    "dataLabels":"value",
+    "labelPos":"outsideEnd",
+    "labelFont":"10:64748B:false",
+    "axisFont":"10:64748B:Calibri",
+    "legendFont":"10:64748B:Calibri",
+    "title.font":"Georgia",
+    "title.size":"14",
+    "title.color":"333333",
+    "series.outline":"FFFFFF-0.5",
+    "legend":"bottom"
+  }}
+]
+```
+
+Then run:
 
 ```bash
-officecli add slides.pptx /slide[1] --type chart \
-  --prop chartType=column \
-  --prop categories="Q1,Q2,Q3,Q4" \
-  --prop series1="Revenue:42,58,65,78" \
-  --prop x=2cm --prop y=4cm --prop width=29cm --prop height=13cm \
-  --prop colors=1E2761,CADCFC \
-  --prop plotFill=none \
-  --prop chartFill=none \
-  --prop gridlines="E2E8F0:0.5" \
-  --prop dataLabels=value \
-  --prop labelPos=outsideEnd \
-  --prop labelFont="10:64748B:false" \
-  --prop axisFont="10:64748B:Calibri" \
-  --prop legendFont="10:64748B:Calibri" \
-  --prop title.font=Georgia \
-  --prop title.size=14 \
-  --prop title.color=333333 \
-  --prop series.outline="FFFFFF-0.5" \
-  --prop legend=bottom
+officecli batch slides.pptx --input modern-chart.json
 ```
 
 Key styling properties:
@@ -478,22 +487,32 @@ officecli set slides.pptx "/slide[1]/chart[1]" --prop gap=80
 > **When the slide background is dark (e.g. `1E2761`, `36454F`), charts default to black text that is nearly invisible.**
 > You must explicitly set axis labels, legend, and title colors to light shades.
 
+Use a batch file (Write tool). `dark-chart.json`:
+
+```json
+[
+  {"command":"add","parent":"/slide[N]","type":"chart","props":{
+    "chartType":"column",
+    "categories":"Q1,Q2,Q3,Q4",
+    "series1":"Revenue:42,58,65,78",
+    "x":"2cm","y":"4cm","width":"29cm","height":"13cm",
+    "colors":"CADCFC,97BC62",
+    "plotFill":"none",
+    "chartFill":"none",
+    "gridlines":"FFFFFF:0.2",
+    "axisFont":"11:CADCFC:Calibri",
+    "legendFont":"11:CADCFC:Calibri",
+    "labelFont":"10:FFFFFF:false",
+    "title.color":"FFFFFF",
+    "title.size":"14"
+  }}
+]
+```
+
+Then run (replace `/slide[N]` with the actual slide index in the JSON before invoking):
+
 ```bash
-# Chart on a dark-background slide — set the following color properties
-officecli add slides.pptx /slide[N] --type chart \
-  --prop chartType=column \
-  --prop categories="Q1,Q2,Q3,Q4" \
-  --prop series1="Revenue:42,58,65,78" \
-  --prop x=2cm --prop y=4cm --prop width=29cm --prop height=13cm \
-  --prop colors=CADCFC,97BC62 \
-  --prop plotFill=none \
-  --prop chartFill=none \
-  --prop gridlines="FFFFFF:0.2" \
-  --prop axisFont="11:CADCFC:Calibri" \
-  --prop legendFont="11:CADCFC:Calibri" \
-  --prop labelFont="10:FFFFFF:false" \
-  --prop title.color=FFFFFF \
-  --prop title.size=14
+officecli batch slides.pptx --input dark-chart.json
 ```
 
 Color rules for dark-background charts:
@@ -520,20 +539,11 @@ Color rules for dark-background charts:
 Include all series in the `add` command using `series1`, `series2`, etc. or the `data` prop. Both forms work in single commands and in batch mode:
 
 ```bash
-# Using seriesN props
-officecli add slides.pptx "/slide[1]" --type chart --prop chartType=column \
-  --prop categories="Q1,Q2,Q3,Q4" \
-  --prop series1="2024:42,58,65,78" \
-  --prop series2="2025:51,67,74,92" \
-  --prop x=2cm --prop y=4cm --prop width=29cm --prop height=13cm \
-  --prop colors=1E2761,CADCFC
+# Using seriesN props (single-line argv, PowerShell-safe)
+officecli add slides.pptx "/slide[1]" --type chart --prop chartType=column --prop categories="Q1,Q2,Q3,Q4" --prop series1="2024:42,58,65,78" --prop series2="2025:51,67,74,92" --prop x=2cm --prop y=4cm --prop width=29cm --prop height=13cm --prop colors=1E2761,CADCFC
 
 # Or using data prop (equivalent)
-officecli add slides.pptx "/slide[1]" --type chart --prop chartType=column \
-  --prop categories="Q1,Q2,Q3,Q4" \
-  --prop data="2024:42,58,65,78;2025:51,67,74,92" \
-  --prop x=2cm --prop y=4cm --prop width=29cm --prop height=13cm \
-  --prop colors=1E2761,CADCFC
+officecli add slides.pptx "/slide[1]" --type chart --prop chartType=column --prop categories="Q1,Q2,Q3,Q4" --prop data="2024:42,58,65,78;2025:51,67,74,92" --prop x=2cm --prop y=4cm --prop width=29cm --prop height=13cm --prop colors=1E2761,CADCFC
 ```
 
 Batch mode:

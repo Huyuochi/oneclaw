@@ -62,7 +62,7 @@ The batch flow is always:
 
 Do **not** feed batch JSON via shell here-documents, pipes, `echo`, or shell loops — those constructs break on Windows cmd / PowerShell. `--input <file>` is the only cross-platform path.
 
-**Always use `officecli open`/`close`.** It keeps the file in memory so every command skips repeated file I/O. Batch and resident mode are independent: each works on its own, and they can be combined.
+**Always use `officecli open`/`close`.** It keeps the file in memory so every command skips repeated file I/O. Batch and resident mode are independent — but do NOT combine them on the same file: running `batch <file>` while a resident daemon still holds `<file>` races with the daemon's write handle and triggers `EBUSY: resource busy or locked`. If you opened the file with `officecli open`, run `officecli close <file>` before any `officecli batch <file> --input ...` invocation, then `officecli open` again afterwards if you still need the resident speedup.
 
 **Batch chunk size:** Keep batches under 15 operations for incremental work, up to ~50 ops for pure body content. Split by section (e.g., one batch per heading + its body paragraphs).
 
@@ -99,10 +99,10 @@ officecli add report.docx / --type footer --prop type=first --prop text=""
 officecli add report.docx / --type footer --prop text="Page " --prop type=default --prop alignment=center --prop size=9pt --prop font=Calibri
 
 # Step 3: REQUIRED -- inject PAGE field via raw-set (footer[2] = default when first-page footer also exists)
-officecli raw-set report.docx "/footer[2]" \
-  --xpath "//w:p" \
-  --action append \
-  --xml '<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="18"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>'
+# Long raw XML payload — author page-field.json with the Write tool, then run a single batch command (works on macOS / Windows cmd / Windows PowerShell).
+# page-field.json:
+#   [{"command":"raw-set","path":"/footer[2]","xpath":"//w:p","action":"append","xml":"<w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:rFonts w:ascii=\"Calibri\" w:hAnsi=\"Calibri\"/><w:sz w:val=\"18\"/></w:rPr><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:rFonts w:ascii=\"Calibri\" w:hAnsi=\"Calibri\"/><w:sz w:val=\"18\"/></w:rPr><w:instrText xml:space=\"preserve\"> PAGE </w:instrText></w:r><w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:rFonts w:ascii=\"Calibri\" w:hAnsi=\"Calibri\"/><w:sz w:val=\"18\"/></w:rPr><w:fldChar w:fldCharType=\"end\"/></w:r>"}]
+officecli batch report.docx --input page-field.json
 
 # Watermark
 officecli add report.docx / --type watermark --prop text=DRAFT --prop color=C0C0C0 --prop opacity=0.5
@@ -264,10 +264,10 @@ officecli add paper.docx / --type footer --prop type=first --prop text=""
 officecli add paper.docx / --type footer --prop text="Page " --prop type=default --prop alignment=center --prop size=9pt
 
 # Step 3: REQUIRED -- inject PAGE field via raw-set
-officecli raw-set paper.docx "/footer[2]" \
-  --xpath "//w:p" \
-  --action append \
-  --xml '<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:sz w:val="18"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>'
+# Long raw XML payload — author paper-page-field.json with the Write tool, then run one batch command.
+# paper-page-field.json:
+#   [{"command":"raw-set","path":"/footer[2]","xpath":"//w:p","action":"append","xml":"<w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:sz w:val=\"18\"/></w:rPr><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:sz w:val=\"18\"/></w:rPr><w:instrText xml:space=\"preserve\"> PAGE </w:instrText></w:r><w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:sz w:val=\"18\"/></w:rPr><w:fldChar w:fldCharType=\"end\"/></w:r>"}]
+officecli batch paper.docx --input paper-page-field.json
 
 # Table of Contents
 officecli add paper.docx /body --type toc --prop levels="1-3" --prop title="Table of Contents" --prop hyperlinks=true --prop pagenumbers=true

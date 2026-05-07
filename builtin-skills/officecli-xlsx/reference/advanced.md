@@ -64,8 +64,11 @@ For advanced chart customization not available through high-level commands (tren
 # Create a chart part (--type flag required)
 officecli add-part data.xlsx /Sheet1 --type chart
 
-# Inject custom chart XML
-officecli raw-set data.xlsx "/Sheet1/chart[1]" --xpath "//c:plotArea" --action append --xml '<c:trendline><c:trendlineType val="linear"/></c:trendline>'
+# Inject custom chart XML — any raw XML payload must go through batch --input
+# (single-quoted XML is not portable to Windows cmd / PowerShell).
+# trendline.json:
+#   [{"command":"raw-set","path":"/Sheet1/chart[1]","xpath":"//c:plotArea","action":"append","xml":"<c:trendline><c:trendlineType val=\"linear\"/></c:trendline>"}]
+officecli batch data.xlsx --input trendline.json
 ```
 
 Use high-level `add --type chart` first. Fall back to raw XML only for features not exposed by high-level commands.

@@ -5,6 +5,22 @@ description: "Use this skill when a .docx file is involved — creating, reading
 
 # OfficeCLI DOCX Skill
 
+> ## STOP — READ THIS FIRST (Windows PowerShell Compatibility)
+>
+> Every command in this skill must be a **single line** of plain `officecli ...` argv, OR routed through a JSON file via `officecli batch <file> --input batch.json`. Nothing else is portable.
+>
+> **NEVER use any of these — they break on Windows PowerShell:**
+>
+> 1. **Backslash `\` line continuation** — PowerShell does not recognize it, throws `InvalidEndOfLine`. Do NOT recommend the PowerShell backtick `` ` `` either; instead, write the command on one line, or use `--input batch.json`.
+> 2. **Here-documents** — `cat <<'EOF' ... EOF | officecli batch ...` is bash-only, fails in PowerShell and Windows cmd.
+> 3. **Piping JSON into stdin** — `echo '...' | officecli batch ...`, `Write-Output ... | ...`, `Get-Content ... |`. Always pass JSON via `--input <file>`.
+> 4. **Shell text utilities** — `awk`, `sed`, `printf`, `tr`, `while read`. Not portable.
+> 5. **Helper scripts in interpreted languages** — Python / Node / Ruby / shell loops to generate the batch JSON or wrap `officecli`. Forbidden.
+>
+> **For any command with 3+ `--prop` flags, or any raw XML payload:** use the `Write` tool to author `batch.json`, then run `officecli batch <file.docx> --input batch.json`. This is the only path that works identically on macOS Terminal, Windows cmd, and Windows PowerShell.
+>
+> If you are about to type `\` at the end of a line, stop and rewrite the command as a single line or as a JSON batch.
+
 ## Install
 
 `officecli` ships preinstalled with OneClaw. Verify with:
@@ -19,12 +35,14 @@ If the command is not found, the OneClaw installation is broken — please reins
 
 ## Cross-platform contract
 
-This skill runs identically on macOS Terminal, Windows cmd, and Windows PowerShell because every command is a plain CLI invocation with no shell-specific syntax.
+This skill runs identically on macOS Terminal, Windows cmd, and Windows PowerShell because every command is a plain CLI invocation with no shell-specific syntax. Violating this contract produces `InvalidEndOfLine` parser errors on PowerShell and silent quoting bugs on cmd.
 
-- All commands are `officecli <verb> <file> [args...]` — plain argv, never piped through shell interpreters.
-- Bulk operations always go through a JSON file: use the `Write` tool to create `batch.json`, then call `officecli batch <file> --input batch.json`.
-- No shell-only constructs allowed in this skill: no here-documents, no piping JSON into stdin, no text-processing utilities like `awk` / `sed` / `printf` / `while read`, no single-quote escape tricks.
-- Path quoting: when a path contains spaces, wrap the whole path argument in double quotes (`"My File.docx"`) — works in all three shells. Inside batch JSON files, paths need no shell escaping (just JSON-escape `\` as `\\`).
+- **One command = one line.** Never use `\` (bash) or `` ` `` (PowerShell) line continuation. If a command feels too long, use `--input batch.json` instead.
+- **All commands are `officecli <verb> <file> [args...]`** — plain argv, never piped through shell interpreters.
+- **Bulk operations or any command with raw XML always go through a JSON file:** use the `Write` tool to create `batch.json`, then call `officecli batch <file> --input batch.json`.
+- **No shell-only constructs allowed in this skill:** no here-documents (`<<'EOF'`), no piping JSON into stdin (`echo '...' | officecli`), no text-processing utilities (`awk` / `sed` / `printf` / `tr` / `while read`), no single-quote escape tricks, no shell loops, no Python / Node / Ruby helper scripts to generate the JSON or wrap CLI calls.
+- **Path quoting:** when a path contains spaces, wrap the whole path argument in double quotes (`"My File.docx"`) — works in all three shells. Inside batch JSON files, paths need no shell escaping (just JSON-escape `\` as `\\`).
+- **Why no rationalization:** even if a particular bash-only construct "looks portable" or you previously saw it work, it will fail on Windows PowerShell with `InvalidEndOfLine` or silently mis-quote on Windows cmd. There is no exception. The single-line + `--input batch.json` rule is non-negotiable.
 
 ---
 

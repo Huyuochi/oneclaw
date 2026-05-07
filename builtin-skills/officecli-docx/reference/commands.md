@@ -66,14 +66,10 @@ No dedicated code type. Use monospace font + shading:
 
 ```bash
 # Single-line code block
-officecli add doc.docx /body --type paragraph \
-  --prop text='GET /api/users HTTP/1.1' \
-  --prop font='Courier New' --prop size=10pt --prop shd=F5F5F5 --prop indent=720
+officecli add doc.docx /body --type paragraph --prop text="GET /api/users HTTP/1.1" --prop font="Courier New" --prop size=10pt --prop shd=F5F5F5 --prop indent=720
 
 # Reusable Code style (define once)
-officecli add doc.docx /styles --type style \
-  --prop name="Code" --prop id=Code --prop type=paragraph \
-  --prop font='Courier New' --prop size=10pt --prop shd=F5F5F5 --prop indent=720
+officecli add doc.docx /styles --type style --prop name="Code" --prop id=Code --prop type=paragraph --prop font="Courier New" --prop size=10pt --prop shd=F5F5F5 --prop indent=720
 
 # Apply it
 officecli add doc.docx /body --type paragraph --prop text='npm install' --prop style=Code
@@ -255,43 +251,31 @@ officecli set doc.docx "/body/p[5]/r[1]" --prop src=new-photo.jpg
 
 ```bash
 # Column chart
-officecli add doc.docx /body --type chart --prop chartType=column --prop title="Revenue" \
-  --prop categories="Q1,Q2,Q3,Q4" --prop series1="2024:42,58,65,78" --prop series2="2025:51,67,74,92" \
-  --prop width=15cm --prop height=10cm --prop colors=1F4E79,4472C4 --prop legend=bottom
+officecli add doc.docx /body --type chart --prop chartType=column --prop title="Revenue" --prop categories="Q1,Q2,Q3,Q4" --prop series1="2024:42,58,65,78" --prop series2="2025:51,67,74,92" --prop width=15cm --prop height=10cm --prop colors=1F4E79,4472C4 --prop legend=bottom
 
 # Pie chart
-officecli add doc.docx /body --type chart --prop chartType=pie --prop title="Market Share" \
-  --prop categories="A,B,C" --prop data="Share:40,35,25" --prop colors=1F4E79,4472C4,A9D18E \
-  --prop dataLabels=percent --prop legend=right
+officecli add doc.docx /body --type chart --prop chartType=pie --prop title="Market Share" --prop categories="A,B,C" --prop data="Share:40,35,25" --prop colors=1F4E79,4472C4,A9D18E --prop dataLabels=percent --prop legend=right
 
 # Line chart
-officecli add doc.docx /body --type chart --prop chartType=line --prop title="Trend" \
-  --prop categories="Jan,Feb,Mar" --prop series1="Revenue:10,15,13" --prop legend=bottom
+officecli add doc.docx /body --type chart --prop chartType=line --prop title="Trend" --prop categories="Jan,Feb,Mar" --prop series1="Revenue:10,15,13" --prop legend=bottom
 
 # Bar chart (horizontal)
-officecli add doc.docx /body --type chart --prop chartType=bar --prop categories="US,EU,APAC" \
-  --prop data="Sales:30,40,25"
+officecli add doc.docx /body --type chart --prop chartType=bar --prop categories="US,EU,APAC" --prop data="Sales:30,40,25"
 
 # Doughnut chart
-officecli add doc.docx /body --type chart --prop chartType=doughnut --prop categories="Complete,Remaining" \
-  --prop data="Progress:75,25" --prop colors=2C5F2D,E8E8E8
+officecli add doc.docx /body --type chart --prop chartType=doughnut --prop categories="Complete,Remaining" --prop data="Progress:75,25" --prop colors=2C5F2D,E8E8E8
 
 # Combo chart (bar + line)
-officecli add doc.docx /body --type chart --prop chartType=combo --prop categories="Q1,Q2,Q3,Q4" \
-  --prop series1="Revenue:100,200,150,300" --prop series2="Growth:10,15,12,25" \
-  --prop comboSplit=1 --prop secondary=2
+officecli add doc.docx /body --type chart --prop chartType=combo --prop categories="Q1,Q2,Q3,Q4" --prop series1="Revenue:100,200,150,300" --prop series2="Growth:10,15,12,25" --prop comboSplit=1 --prop secondary=2
 
 # Radar chart
-officecli add doc.docx /body --type chart --prop chartType=radar \
-  --prop categories="Quality,Speed,Cost,Innovation,Support" --prop data="Score:8,7,6,9,8"
+officecli add doc.docx /body --type chart --prop chartType=radar --prop categories="Quality,Speed,Cost,Innovation,Support" --prop data="Score:8,7,6,9,8"
 
 # Stacked column
-officecli add doc.docx /body --type chart --prop chartType=columnStacked \
-  --prop categories="Q1,Q2,Q3,Q4" --prop series1="A:10,20,15,25" --prop series2="B:8,12,18,22"
+officecli add doc.docx /body --type chart --prop chartType=columnStacked --prop categories="Q1,Q2,Q3,Q4" --prop series1="A:10,20,15,25" --prop series2="B:8,12,18,22"
 
 # Scatter chart
-officecli add doc.docx /body --type chart --prop chartType=scatter \
-  --prop categories="1,2,3,4,5" --prop data="Values:10,25,18,30,22"
+officecli add doc.docx /body --type chart --prop chartType=scatter --prop categories="1,2,3,4,5" --prop data="Values:10,25,18,30,22"
 ```
 
 **Chart types:** column, columnStacked, bar, barStacked, line, lineStacked, pie, pie3d, doughnut, area, areaStacked, scatter, bubble, radar, stock, combo, column3d, bar3d, line3d, area3d
@@ -402,10 +386,10 @@ Header/footer types: `default`, `first`, `even`
 officecli add doc.docx / --type footer --prop text="Page " --prop type=default --prop alignment=center --prop size=9pt
 
 # Step 2: Inject PAGE field via raw-set (footer[1] when no first-page footer)
-officecli raw-set doc.docx "/footer[1]" \
-  --xpath "//w:p" \
-  --action append \
-  --xml '<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:sz w:val="18"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>'
+# Long raw XML payload — author page-field.json with the Write tool, then run a single batch command (works on every shell).
+# page-field.json:
+#   [{"command":"raw-set","path":"/footer[1]","xpath":"//w:p","action":"append","xml":"<w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:sz w:val=\"18\"/></w:rPr><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:sz w:val=\"18\"/></w:rPr><w:instrText xml:space=\"preserve\"> PAGE </w:instrText></w:r><w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:sz w:val=\"18\"/></w:rPr><w:fldChar w:fldCharType=\"end\"/></w:r>"}]
+officecli batch doc.docx --input page-field.json
 ```
 
 **First-page suppression (cover page without page number):**
@@ -418,10 +402,10 @@ officecli add doc.docx / --type footer --prop type=first --prop text=""
 officecli add doc.docx / --type footer --prop text="Page " --prop type=default --prop alignment=center --prop size=9pt
 
 # Step 3: Inject PAGE field (footer[2] = default when first-page footer also exists)
-officecli raw-set doc.docx "/footer[2]" \
-  --xpath "//w:p" \
-  --action append \
-  --xml '<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:sz w:val="18"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>'
+# Long raw XML payload — author page-field-2.json with the Write tool, then run one batch command.
+# page-field-2.json:
+#   [{"command":"raw-set","path":"/footer[2]","xpath":"//w:p","action":"append","xml":"<w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:sz w:val=\"18\"/></w:rPr><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:sz w:val=\"18\"/></w:rPr><w:instrText xml:space=\"preserve\"> PAGE </w:instrText></w:r><w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:sz w:val=\"18\"/></w:rPr><w:fldChar w:fldCharType=\"end\"/></w:r>"}]
+officecli batch doc.docx --input page-field-2.json
 ```
 
 **WARNING:** `set / --prop differentFirstPage=true` is UNSUPPORTED. Adding `type=first` footer is sufficient.
@@ -432,18 +416,15 @@ Each `add / --type footer --prop type=default` appends a new paragraph to the sa
 
 ```bash
 # Line 1: company name (left)
-officecli add doc.docx / --type footer --prop type=default \
-  --prop text="Acme Corp | Confidential" --prop alignment=left --prop size=9pt
+officecli add doc.docx / --type footer --prop type=default --prop text="Acme Corp | Confidential" --prop alignment=left --prop size=9pt
 
 # Line 2: static "Page " text (center)
-officecli add doc.docx / --type footer --prop text="Page " \
-  --prop type=default --prop alignment=center --prop size=9pt
+officecli add doc.docx / --type footer --prop text="Page " --prop type=default --prop alignment=center --prop size=9pt
 
-# Inject PAGE field into the last paragraph of footer
-officecli raw-set doc.docx "/footer[1]" \
-  --xpath "(//w:p)[last()]" \
-  --action append \
-  --xml '<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="18"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>'
+# Inject PAGE field into the last paragraph of footer — long raw XML, route through a JSON file.
+# composite-page-field.json:
+#   [{"command":"raw-set","path":"/footer[1]","xpath":"(//w:p)[last()]","action":"append","xml":"<w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:rFonts w:ascii=\"Calibri\" w:hAnsi=\"Calibri\"/><w:sz w:val=\"18\"/></w:rPr><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:rFonts w:ascii=\"Calibri\" w:hAnsi=\"Calibri\"/><w:sz w:val=\"18\"/></w:rPr><w:instrText xml:space=\"preserve\"> PAGE </w:instrText></w:r><w:r xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:rPr><w:rFonts w:ascii=\"Calibri\" w:hAnsi=\"Calibri\"/><w:sz w:val=\"18\"/></w:rPr><w:fldChar w:fldCharType=\"end\"/></w:r>"}]
+officecli batch doc.docx --input composite-page-field.json
 ```
 
 Verify with: `officecli get doc.docx "/footer[N]" --depth 3` -- output must show `fldChar` children.
@@ -595,13 +576,10 @@ SDT types: `text`, `richtext`, `dropdown`, `combobox`, `date`
 
 ```bash
 # Paragraph style
-officecli add doc.docx /styles --type style --prop name="Block Quote" --prop id=BlockQuote --prop type=paragraph \
-  --prop basedOn=Normal --prop font=Georgia --prop size=11 --prop italic=true --prop color=555555 \
-  --prop leftIndent=720 --prop rightIndent=720 --prop spaceBefore=12pt --prop spaceAfter=12pt
+officecli add doc.docx /styles --type style --prop name="Block Quote" --prop id=BlockQuote --prop type=paragraph --prop basedOn=Normal --prop font=Georgia --prop size=11 --prop italic=true --prop color=555555 --prop leftIndent=720 --prop rightIndent=720 --prop spaceBefore=12pt --prop spaceAfter=12pt
 
 # Character style
-officecli add doc.docx /styles --type style --prop name="Emphasis Bold" --prop id=EmphasisBold --prop type=character \
-  --prop bold=true --prop color=1F4E79
+officecli add doc.docx /styles --type style --prop name="Emphasis Bold" --prop id=EmphasisBold --prop type=character --prop bold=true --prop color=1F4E79
 
 # Apply style
 officecli set doc.docx "/body/p[10]" --prop style=BlockQuote
@@ -690,20 +668,20 @@ officecli raw doc.docx /numbering
 # Modify XML attribute
 officecli raw-set doc.docx /document --xpath "//w:body/w:p[1]/w:pPr/w:jc" --action setattr --xml "w:val=center"
 
-# Append XML element
-officecli raw-set doc.docx /document --xpath "//w:body/w:p[1]/w:pPr" --action append \
-  --xml '<w:tabs><w:tab w:val="right" w:pos="9360"/></w:tabs>'
+# Append XML element — any raw XML payload must go through batch --input (single-quoted XML is not portable to Windows cmd / PowerShell).
+# tabs.json: [{"command":"raw-set","path":"/document","xpath":"//w:body/w:p[1]/w:pPr","action":"append","xml":"<w:tabs><w:tab w:val=\"right\" w:pos=\"9360\"/></w:tabs>"}]
+officecli batch doc.docx --input tabs.json
 
 # Remove XML element
 officecli raw-set doc.docx /document --xpath "//w:body/w:p[3]" --action remove
 
-# Internal hyperlink (link to bookmark)
-officecli raw-set doc.docx /document --xpath "//w:body/w:p[14]" --action append \
-  --xml '<w:hyperlink w:anchor="methodology"><w:r><w:rPr><w:rStyle w:val="Hyperlink"/><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr><w:t>Methodology</w:t></w:r></w:hyperlink>'
+# Internal hyperlink (link to bookmark) — long XML payload, prefer the batch JSON path:
+#   hyperlink.json: [{"command":"raw-set","path":"/document","xpath":"//w:body/w:p[14]","action":"append","xml":"<w:hyperlink w:anchor=\"methodology\"><w:r><w:rPr><w:rStyle w:val=\"Hyperlink\"/><w:color w:val=\"0563C1\"/><w:u w:val=\"single\"/></w:rPr><w:t>Methodology</w:t></w:r></w:hyperlink>"}]
+officecli batch doc.docx --input hyperlink.json
 
-# Tracked change (insertion) via raw XML
-officecli raw-set doc.docx /document --xpath "//w:body/w:p[5]" --action append \
-  --xml '<w:ins w:id="1" w:author="Claude" w:date="2026-03-27T00:00:00Z"><w:r><w:t>inserted text</w:t></w:r></w:ins>'
+# Tracked change (insertion) via raw XML — batch JSON path:
+#   track-ins.json: [{"command":"raw-set","path":"/document","xpath":"//w:body/w:p[5]","action":"append","xml":"<w:ins w:id=\"1\" w:author=\"Claude\" w:date=\"2026-03-27T00:00:00Z\"><w:r><w:t>inserted text</w:t></w:r></w:ins>"}]
+officecli batch doc.docx --input track-ins.json
 
 # Add new document part
 officecli add-part doc.docx /document
@@ -731,8 +709,7 @@ officecli close doc.docx
 officecli set doc.docx / --prop title="Q4 Report" --prop author="Team Alpha"
 
 # Set page size and margins
-officecli set doc.docx / --prop pageWidth=12240 --prop pageHeight=15840 \
-  --prop marginTop=1440 --prop marginBottom=1440 --prop marginLeft=1440 --prop marginRight=1440
+officecli set doc.docx / --prop pageWidth=12240 --prop pageHeight=15840 --prop marginTop=1440 --prop marginBottom=1440 --prop marginLeft=1440 --prop marginRight=1440
 
 # Set default font
 officecli set doc.docx / --prop defaultFont=Calibri

@@ -279,11 +279,19 @@ officecli set template.pptx /slide[3]/chart[1] --prop title="Updated Revenue Tre
 # Remove existing chart
 officecli remove template.pptx "/slide[3]/chart[1]"
 
-# Recreate with all series (both series1+series2 props and data prop work)
-officecli add template.pptx "/slide[3]" --type chart --prop chartType=column \
-  --prop categories="Q1,Q2,Q3,Q4" \
-  --prop series1="Revenue:51,67,74,92" --prop series2="Costs:30,35,38,42" \
-  --prop x=2cm --prop y=4cm --prop width=29cm --prop height=13cm --prop colors=1E2761,CADCFC
+# Recreate with all series. The chart has 8+ props — use a batch file (Write tool).
+# chart-add.json:
+# [
+#   {"command":"add","parent":"/slide[3]","type":"chart","props":{
+#     "chartType":"column",
+#     "categories":"Q1,Q2,Q3,Q4",
+#     "series1":"Revenue:51,67,74,92",
+#     "series2":"Costs:30,35,38,42",
+#     "x":"2cm","y":"4cm","width":"29cm","height":"13cm",
+#     "colors":"1E2761,CADCFC"
+#   }}
+# ]
+officecli batch template.pptx --input chart-add.json
 ```
 
 ### Update Tables
@@ -374,13 +382,20 @@ Charts default to colors that may be invisible on dark slide backgrounds. When p
 # BAD -- default colors invisible on navy background
 officecli add template.pptx "/slide[6]" --type chart --prop chartType=column ...
 
-# GOOD -- explicit light colors for dark background
-officecli add template.pptx "/slide[6]" --type chart --prop chartType=column \
-  --prop colors=CADCFC,D4A843 \
-  --prop axisFont="10:AABBCC:Calibri" \
-  --prop legendFont="10:AABBCC:Calibri" \
-  --prop gridlines="334466:0.5" \
-  --prop plotFill=none --prop chartFill=none ...
+# GOOD -- explicit light colors for dark background. Use a batch file (Write tool).
+# dark-chart.json:
+# [
+#   {"command":"add","parent":"/slide[6]","type":"chart","props":{
+#     "chartType":"column",
+#     "colors":"CADCFC,D4A843",
+#     "axisFont":"10:AABBCC:Calibri",
+#     "legendFont":"10:AABBCC:Calibri",
+#     "gridlines":"334466:0.5",
+#     "plotFill":"none",
+#     "chartFill":"none"
+#   }}
+# ]
+officecli batch template.pptx --input dark-chart.json
 ```
 
 Use the template's secondary or accent colors (not the primary dark color) for chart series. Set axis and legend fonts to a light/muted color. Set gridlines to a subtle mid-tone that is visible but not dominant.
@@ -439,24 +454,25 @@ officecli get template.pptx "/slide[3]/shape[2]"
 
 Look at the reported font size. If it is larger than you want for your content, you MUST override it in your set command.
 
-**Batch mode:** Include size, font, and color in the props object for every text-setting operation on template shapes:
+**Batch mode:** Include size, font, and color in the props object for every text-setting operation on template shapes. Use the `Write` tool to author `template-edits.json`:
 
-```bash
-cat <<'EOF' | officecli batch template.pptx
+```json
 [
   {"command":"set","path":"/slide[3]/shape[2]","props":{"text":"Enterprise","size":"20","font":"Arial","color":"D4A843"}},
   {"command":"set","path":"/slide[3]/shape[3]","props":{"text":"Platform","size":"20","font":"Arial","color":"D4A843"}}
 ]
-EOF
+```
+
+Then run:
+
+```bash
+officecli batch template.pptx --input template-edits.json
 ```
 
 **If `set --prop size=N` does not visually change the size** (some templates embed formatting at the XML run level that resists high-level overrides), fall back to `raw-set` to directly set the run-level font size:
 
 ```bash
-officecli raw-set template.pptx "/slide[3]" \
-  --xpath "//p:sp[2]//a:rPr" \
-  --action setattr \
-  --xml "sz=2000"
+officecli raw-set template.pptx "/slide[3]" --xpath "//p:sp[2]//a:rPr" --action setattr --xml "sz=2000"
 ```
 
 (where `sz=2000` = 20pt in half-points; `sz=2400` = 24pt, etc.)
@@ -551,15 +567,10 @@ When the high-level CLI cannot express what you need, fall back to raw XML:
 officecli raw template.pptx /slide[1]
 
 # Modify raw XML
-officecli raw-set template.pptx /slide[1] \
-  --xpath "//p:sp[1]//a:solidFill/a:srgbClr" \
-  --action setattr \
-  --xml "val=FF0000"
+officecli raw-set template.pptx "/slide[1]" --xpath "//p:sp[1]//a:solidFill/a:srgbClr" --action setattr --xml "val=FF0000"
 
 # Remove all animations from a slide
-officecli raw-set template.pptx /slide[1] \
-  --xpath "//p:timing" \
-  --action remove
+officecli raw-set template.pptx "/slide[1]" --xpath "//p:timing" --action remove
 ```
 
 Raw-set actions: append, prepend, insertbefore, insertafter, replace, remove, setattr.

@@ -1,6 +1,6 @@
 ---
 name: officecli-pptx
-description: "Use this skill any time a .pptx file is involved -- as input, output, or both. This includes: creating slide decks, pitch decks, or presentations; reading, parsing, or extracting text from any .pptx file; editing, modifying, or updating existing presentations; combining or splitting slide files; working with templates, layouts, speaker notes, or comments. Trigger whenever the user mentions 'deck,' 'slides,' 'presentation,' or references a .pptx filename. Drive bulk edits through JSON batch payloads handed to officecli batch (heredoc or --input); never write Python / Node / Ruby (or other interpreted-language) helper scripts to generate the JSON or wrap CLI calls."
+description: "Use this skill any time a .pptx file is involved -- as input, output, or both. This includes: creating slide decks, pitch decks, or presentations; reading, parsing, or extracting text from any .pptx file; editing, modifying, or updating existing presentations; combining or splitting slide files; working with templates, layouts, speaker notes, or comments. Trigger whenever the user mentions 'deck,' 'slides,' 'presentation,' or references a .pptx filename. Drive bulk edits through JSON batch payloads handed to officecli batch (--input); never write Python / Node / Ruby (or other interpreted-language) helper scripts to generate the JSON or wrap CLI calls."
 metadata:
   {
     "openclaw":
@@ -13,6 +13,22 @@ metadata:
 ---
 
 # OfficeCLI PPTX Skill
+
+> ## STOP — READ THIS FIRST (Windows PowerShell Compatibility)
+>
+> Every command in this skill must be a **single line** of plain `officecli ...` argv, OR routed through a JSON file via `officecli batch <file> --input batch.json`. Nothing else is portable.
+>
+> **NEVER use any of these — they break on Windows PowerShell:**
+>
+> 1. **Backslash `\` line continuation** — PowerShell does not recognize it, throws `InvalidEndOfLine`. Do NOT recommend the PowerShell backtick `` ` `` either; instead, write the command on one line, or use `--input batch.json`.
+> 2. **Here-documents** — `cat <<'EOF' ... EOF | officecli batch ...` is bash-only, fails in PowerShell and Windows cmd.
+> 3. **Piping JSON into stdin** — `echo '...' | officecli batch ...`, `Write-Output ... | ...`, `Get-Content ... |`. Always pass JSON via `--input <file>`.
+> 4. **Shell text utilities** — `awk`, `sed`, `printf`, `tr`, `while read`. Not portable.
+> 5. **Helper scripts in interpreted languages** — Python / Node / Ruby / shell loops to generate the batch JSON or wrap `officecli`. Forbidden.
+>
+> **For any command with 3+ `--prop` flags, or any raw XML payload:** use the `Write` tool to author `batch.json`, then run `officecli batch <file.pptx> --input batch.json`. This is the only path that works identically on macOS Terminal, Windows cmd, and Windows PowerShell.
+>
+> If you are about to type `\` at the end of a line, stop and rewrite the command as a single line or as a JSON batch.
 
 ## BEFORE YOU START (CRITICAL)
 
@@ -200,8 +216,8 @@ Full QA procedures and pre-delivery checklist: [reference/qa-checklist.md](refer
 | `x=-3cm` | Negative coordinates **are supported** and can be used for bleed effects (e.g., `x=-2cm` lets a decorative element overflow the left edge). |
 | `/shape[myname]` | Name indexing not supported. Use numeric index: `/shape[3]` |
 | Guessing property names | Run `officecli pptx set shape` to see exact names |
-| `\n`/`\\` in shell strings & code slides | Plain text shape: use `\\n` for a line break, e.g. `--prop text="line1\\nline2"`.<br>**For code slides**: `--prop text="kubectl apply \\n  -f pod.yaml"` renders the literal `\\n` (not a line break). For code content, use a single `\n` for a real line break: `--prop text="line1\nline2"`. Note that in shell single-quoted strings `\n` is literal — prefer a heredoc or JSON batch to pass multiline code and avoid shell-escape issues. |
-| Modifying an open file | Close the file in PowerPoint/WPS first |
+| `\n`/`\\` in shell strings & code slides | Plain text shape: use `\\n` for a line break, e.g. `--prop text="line1\\nline2"`.<br>**For code slides**: `--prop text="kubectl apply \\n  -f pod.yaml"` renders the literal `\\n` (not a line break). For code content, use a single `\n` for a real line break: `--prop text="line1\nline2"`. Note that in shell single-quoted strings `\n` is literal — prefer a JSON batch (`--input batch.json`) to pass multiline code and avoid shell-escape issues. |
+| `EBUSY: resource busy or locked` | A viewer (PowerPoint / WPS / Explorer preview), cloud sync (OneDrive/Dropbox/iCloud), antivirus, or a stale resident daemon is holding the file. Full runbook: [reference/known-issues.md](reference/known-issues.md#ebusy-resource-busy-or-locked). |
 | Hex colors with `#` | Use `FF0000` not `#FF0000` -- no hash prefix |
 | Theme colors | Use `accent1`..`accent6`, `dk1`, `dk2`, `lt1`, `lt2` -- not hex |
 | Forgetting alt text | Always set `--prop alt="description"` on pictures for accessibility |
@@ -209,8 +225,8 @@ Full QA procedures and pre-delivery checklist: [reference/qa-checklist.md](refer
 | `--index` is 0-based | `--index 0` = first position -- array convention |
 | Z-order (shapes overlapping) | Use `--prop zorder=back` or `zorder=front` / `forward` / `backward` / absolute position number. **WARNING:** Z-order changes cause shape index renumbering -- re-query with `get --depth 1` after any z-order change before referencing shapes by index. Process highest index first when changing multiple shapes. |
 | `gap`/`gapwidth` on chart add | Ignored during `add` -- set it after creation: `officecli set ... /slide[N]/chart[M] --prop gap=80` |
-| `$` in `--prop text=` (shell) | `--prop text="$15M"` strips the value — shell expands `$15` as a variable. Use single quotes: `--prop text='$15M'`. For multiline or mixed quotes, use heredoc batch. |
-| `$` and `'` in batch JSON text | Use heredoc: `cat <<'EOF' \| officecli batch` -- single-quoted delimiter prevents shell expansion of `$`, apostrophes, and backticks |
+| `$` in `--prop text=` (shell) | `--prop text="$15M"` strips the value — shell expands `$15` as a variable. Use single quotes: `--prop text='$15M'`. For multiline or mixed quotes, use a JSON batch file. |
+| `$` and `'` in batch JSON text | Author the batch with the `Write` tool (`batch.json`) and run `officecli batch <file.pptx> --input batch.json`. The JSON file is read directly, so shell quoting/expansion never touches the payload. |
 | Template text at wrong size | Template shapes have baked-in font sizes. Always include `size`, `font`, and `color` in every `set` on template shapes. See editing.md "Font Cascade from Template Shapes" section. |
 
 ---
@@ -230,24 +246,30 @@ Use this pattern for every presentation build, regardless of command count.
 
 ## Performance: Batch Mode
 
-Batch is a separate, independent mechanism — use it to collapse many operations into one API call:
+Batch is a separate, independent mechanism — use it to collapse many operations into one API call. **Always author the JSON with the `Write` tool, then pass it via `--input`** — this is the only path that works identically on macOS Terminal, Windows cmd, and Windows PowerShell.
 
-```bash
-# ⚠️ zsh note: in batch mode, JSON path fields (e.g. "/slide[1]") are already quoted in the JSON, so no extra escaping is needed.
-# But for non-batch direct commands, /slide[1] must be quoted on the shell, or zsh will error out.
-cat <<'EOF' | officecli batch slides.pptx
+1. Use the `Write` tool to create `batch.json`:
+
+```json
 [
   {"command":"add","parent":"/slide[1]","type":"shape","props":{"text":"Title","x":"2cm","y":"2cm","width":"20cm","height":"3cm","size":"36","bold":"true"}},
   {"command":"add","parent":"/slide[1]","type":"shape","props":{"text":"Body text","x":"2cm","y":"6cm","width":"20cm","height":"10cm","size":"16"}}
 ]
-EOF
 ```
+
+2. Run the batch:
+
+```bash
+officecli batch slides.pptx --input batch.json
+```
+
+> Note: in batch mode, JSON path fields (e.g. `"/slide[1]"`) live inside the JSON file, so shell glob/quoting rules never apply. For non-batch direct commands, `/slide[1]` still must be quoted on the shell, or zsh will error out.
 
 Batch supports: `add`, `set`, `get`, `query`, `remove`, `move`, `swap`, `view`, `raw`, `raw-set`, `validate`.
 
-**Batch and resident mode are independent.** Each improves performance on its own. They can be combined, but batch alone (without `open`) already handles the file I/O in one cycle per batch call.
+**Batch and resident mode are independent — but do NOT combine them on the same file.** Each improves performance on its own; running `batch <file>` while a resident daemon still holds `<file>` races with the daemon's write handle and triggers `EBUSY: resource busy or locked` (see [reference/known-issues.md](reference/known-issues.md#ebusy-resource-busy-or-locked)). If you opened the file with `officecli open`, end the resident session with `officecli close <file>` **before** any `officecli batch <file> --input ...` invocation.
 
-**Do not** generate batch JSON or wrap `officecli` calls with Python / Node / Ruby (or any other interpreted-language) helper scripts. Author the JSON inline (heredoc or Write tool) and invoke `officecli batch` in the same observed step. Runtime-generated payloads hide the ops from review, depend on an interpreter the host may not have, and defeat the small-chunk checkpoint discipline above.
+**Do not** generate batch JSON or wrap `officecli` calls with Python / Node / Ruby (or any other interpreted-language) helper scripts. Author the JSON with the `Write` tool and invoke `officecli batch <file> --input batch.json` in the same observed step. Runtime-generated payloads hide the ops from review, depend on an interpreter the host may not have, and defeat the small-chunk checkpoint discipline above.
 
 Batch fields: `command`, `path`, `parent`, `type`, `from`, `to`, `index`, `after`, `before`, `props` (dict), `selector`, `mode`, `depth`, `part`, `xpath`, `action`, `xml`.
 

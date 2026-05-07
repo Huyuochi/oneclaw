@@ -17,26 +17,16 @@ The recipes below target visual problems that come up frequently in real decks. 
 officecli add slides.pptx / --type slide --prop layout=blank --prop "background=1E2761-CADCFC-180"
 
 # Step 1: decoration (large semi-transparent number as a background graphic) — added first, in the back
-officecli add slides.pptx /slide[N] --type shape --prop text="02" \
-  --prop x=2cm --prop y=4cm --prop width=29.87cm --prop height=8cm \
-  --prop font=Georgia --prop size=120 --prop bold=true \
-  --prop color=FFFFFF --prop align=center --prop fill=none --prop opacity=0.15
+officecli add slides.pptx "/slide[N]" --type shape --prop text="02" --prop x=2cm --prop y=4cm --prop width=29.87cm --prop height=8cm --prop font=Georgia --prop size=120 --prop bold=true --prop color=FFFFFF --prop align=center --prop fill=none --prop opacity=0.15
 
 # Step 2: left-side accent bar (optional) — decoration, in the back
-officecli add slides.pptx /slide[N] --type shape \
-  --prop preset=rect --prop fill=FFFFFF --prop opacity=0.2 \
-  --prop x=0cm --prop y=7cm --prop width=6cm --prop height=0.4cm --prop line=none
+officecli add slides.pptx "/slide[N]" --type shape --prop preset=rect --prop fill=FFFFFF --prop opacity=0.2 --prop x=0cm --prop y=7cm --prop width=6cm --prop height=0.4cm --prop line=none
 
 # Step 3: title text — added last, automatically on top, y in 7–10cm range
-officecli add slides.pptx /slide[N] --type shape --prop text="Financial Performance" \
-  --prop x=2cm --prop y=7.5cm --prop width=29.87cm --prop height=3cm \
-  --prop font=Georgia --prop size=40 --prop bold=true \
-  --prop color=FFFFFF --prop align=center --prop fill=none
+officecli add slides.pptx "/slide[N]" --type shape --prop text="Financial Performance" --prop x=2cm --prop y=7.5cm --prop width=29.87cm --prop height=3cm --prop font=Georgia --prop size=40 --prop bold=true --prop color=FFFFFF --prop align=center --prop fill=none
 
 # Step 4: subtitle (optional)
-officecli add slides.pptx /slide[N] --type shape --prop text="Section 2 of 4" \
-  --prop x=2cm --prop y=11cm --prop width=29.87cm --prop height=1.5cm \
-  --prop font=Calibri --prop size=16 --prop color=CADCFC --prop align=center --prop fill=none
+officecli add slides.pptx "/slide[N]" --type shape --prop text="Section 2 of 4" --prop x=2cm --prop y=11cm --prop width=29.87cm --prop height=1.5cm --prop font=Calibri --prop size=16 --prop color=CADCFC --prop align=center --prop fill=none
 ```
 
 **After-the-fact fix (when overlap already occurred):**
@@ -69,19 +59,10 @@ officecli get slides.pptx '/slide[N]' --depth 1
 # 9cm × 3 chars → max size ≈ 9×7 = 63pt → use 60pt
 # box height ≥ 60pt × 0.0353cm × 1.5 ≈ 3.2cm → set 4cm (with margin)
 
-officecli add slides.pptx /slide[N] --type shape \
-  --prop text="94%" \
-  --prop x=2cm --prop y=5cm \
-  --prop width=9cm --prop height=4cm \
-  --prop font=Georgia --prop size=60 --prop bold=true \
-  --prop color=CADCFC --prop align=center --prop valign=center --prop fill=none
+officecli add slides.pptx "/slide[N]" --type shape --prop text="94%" --prop x=2cm --prop y=5cm --prop width=9cm --prop height=4cm --prop font=Georgia --prop size=60 --prop bold=true --prop color=CADCFC --prop align=center --prop valign=center --prop fill=none
 
 # Sublabel (KPI caption, ≤5 words, may be < 16pt)
-officecli add slides.pptx /slide[N] --type shape \
-  --prop text="Customer Retention" \
-  --prop x=2cm --prop y=9.2cm \
-  --prop width=9cm --prop height=1.5cm \
-  --prop font=Calibri --prop size=13 --prop color=8899BB --prop align=center --prop fill=none
+officecli add slides.pptx "/slide[N]" --type shape --prop text="Customer Retention" --prop x=2cm --prop y=9.2cm --prop width=9cm --prop height=1.5cm --prop font=Calibri --prop size=13 --prop color=8899BB --prop align=center --prop fill=none
 ```
 
 **Overflow recovery procedure:**
@@ -133,45 +114,23 @@ node_x[3] = 2 + 8.957×3    = 28.87cm  → circle x=28.87cm,   right edge 31.87c
 ```bash
 # 4-node evenly spaced timeline (node_spacing ≈ 8.957cm, circle 3cm, usable_width=26.87cm)
 # Horizontal baseline (from first node's center to last node's center)
-officecli add slides.pptx /slide[N] --type connector \
-  --prop x=3.5cm --prop y=10cm --prop width=27.87cm --prop height=0 \
-  --prop line=CADCFC --prop lineWidth=2pt
+officecli add slides.pptx "/slide[N]" --type connector --prop x=3.5cm --prop y=10cm --prop width=27.87cm --prop height=0 --prop line=CADCFC --prop lineWidth=2pt
 
 # Node 1 (i=0)  x = 2cm, right edge 5cm ✓
-officecli add slides.pptx /slide[N] --type shape \
-  --prop preset=ellipse --prop fill=1E2761 \
-  --prop x=2cm --prop y=8.5cm --prop width=3cm --prop height=3cm --prop line=none
-officecli add slides.pptx /slide[N] --type shape --prop text="Q1" \
-  --prop x=2cm --prop y=8.5cm --prop width=3cm --prop height=3cm \
-  --prop fill=none --prop color=FFFFFF --prop size=16 --prop bold=true \
-  --prop align=center --prop valign=center
+officecli add slides.pptx "/slide[N]" --type shape --prop preset=ellipse --prop fill=1E2761 --prop x=2cm --prop y=8.5cm --prop width=3cm --prop height=3cm --prop line=none
+officecli add slides.pptx "/slide[N]" --type shape --prop text="Q1" --prop x=2cm --prop y=8.5cm --prop width=3cm --prop height=3cm --prop fill=none --prop color=FFFFFF --prop size=16 --prop bold=true --prop align=center --prop valign=center
 
 # Node 2 (i=1)  x = 2 + 8.957 = 10.957cm → use 10.96cm, right edge 13.96cm ✓
-officecli add slides.pptx /slide[N] --type shape \
-  --prop preset=ellipse --prop fill=CADCFC \
-  --prop x=10.96cm --prop y=8.5cm --prop width=3cm --prop height=3cm --prop line=none
-officecli add slides.pptx /slide[N] --type shape --prop text="Q2" \
-  --prop x=10.96cm --prop y=8.5cm --prop width=3cm --prop height=3cm \
-  --prop fill=none --prop color=1E2761 --prop size=16 --prop bold=true \
-  --prop align=center --prop valign=center
+officecli add slides.pptx "/slide[N]" --type shape --prop preset=ellipse --prop fill=CADCFC --prop x=10.96cm --prop y=8.5cm --prop width=3cm --prop height=3cm --prop line=none
+officecli add slides.pptx "/slide[N]" --type shape --prop text="Q2" --prop x=10.96cm --prop y=8.5cm --prop width=3cm --prop height=3cm --prop fill=none --prop color=1E2761 --prop size=16 --prop bold=true --prop align=center --prop valign=center
 
 # Node 3 (i=2)  x = 2 + 8.957×2 = 19.914cm → use 19.91cm, right edge 22.91cm ✓
-officecli add slides.pptx /slide[N] --type shape \
-  --prop preset=ellipse --prop fill=1E2761 \
-  --prop x=19.91cm --prop y=8.5cm --prop width=3cm --prop height=3cm --prop line=none
-officecli add slides.pptx /slide[N] --type shape --prop text="Q3" \
-  --prop x=19.91cm --prop y=8.5cm --prop width=3cm --prop height=3cm \
-  --prop fill=none --prop color=FFFFFF --prop size=16 --prop bold=true \
-  --prop align=center --prop valign=center
+officecli add slides.pptx "/slide[N]" --type shape --prop preset=ellipse --prop fill=1E2761 --prop x=19.91cm --prop y=8.5cm --prop width=3cm --prop height=3cm --prop line=none
+officecli add slides.pptx "/slide[N]" --type shape --prop text="Q3" --prop x=19.91cm --prop y=8.5cm --prop width=3cm --prop height=3cm --prop fill=none --prop color=FFFFFF --prop size=16 --prop bold=true --prop align=center --prop valign=center
 
 # Node 4 (i=3)  x = 2 + 8.957×3 = 28.871cm → use 28.87cm, right edge 31.87cm ✓ (< 33.87)
-officecli add slides.pptx /slide[N] --type shape \
-  --prop preset=ellipse --prop fill=CADCFC \
-  --prop x=28.87cm --prop y=8.5cm --prop width=3cm --prop height=3cm --prop line=none
-officecli add slides.pptx /slide[N] --type shape --prop text="Q4" \
-  --prop x=28.87cm --prop y=8.5cm --prop width=3cm --prop height=3cm \
-  --prop fill=none --prop color=1E2761 --prop size=16 --prop bold=true \
-  --prop align=center --prop valign=center
+officecli add slides.pptx "/slide[N]" --type shape --prop preset=ellipse --prop fill=CADCFC --prop x=28.87cm --prop y=8.5cm --prop width=3cm --prop height=3cm --prop line=none
+officecli add slides.pptx "/slide[N]" --type shape --prop text="Q4" --prop x=28.87cm --prop y=8.5cm --prop width=3cm --prop height=3cm --prop fill=none --prop color=1E2761 --prop size=16 --prop bold=true --prop align=center --prop valign=center
 ```
 
 **Verification:** after building the timeline, confirm node x-coordinates are evenly distributed:

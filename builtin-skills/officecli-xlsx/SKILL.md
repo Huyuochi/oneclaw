@@ -14,6 +14,23 @@ metadata:
 
 # OfficeCLI XLSX Skill
 
+## STOP — READ THIS FIRST (Windows PowerShell)
+
+**This skill runs on Windows PowerShell. PowerShell is NOT bash.** Never reach for these reflexes — they all produce `ParserError: InvalidEndOfLine` and the run fails:
+
+- **No heredoc.** `cat <<'EOF' ... EOF | officecli batch` does not work. PowerShell cannot parse `<<`.
+- **No stdin redirection.** `officecli batch ... < file.json` does not work. (Also: PowerShell 5 emits UTF-16LE and corrupts bytes.)
+- **No backslash line continuation.** A trailing `\` is not understood by PowerShell. Keep every command on a single line.
+
+**The ONLY supported path for any batch operation is:**
+
+1. Use the `Write` tool to author `batch.json` (real file on disk, UTF-8, valid JSON array of ops).
+2. Run, on a single line: `officecli batch <file.xlsx> --input batch.json`.
+
+`--commands '<inline-json>'` is permitted **only** when the JSON is short (≤ 3 ops), pure ASCII, and fits on one line with no embedded newlines. Anything else → `--input file.json`.
+
+This rule is identical on macOS / Linux / cmd / PowerShell, so always default to it. Do not branch on platform.
+
 ## BEFORE YOU START (CRITICAL)
 
 **officecli is pre-installed.** Verify: `officecli --version`
