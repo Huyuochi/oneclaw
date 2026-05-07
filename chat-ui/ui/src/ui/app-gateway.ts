@@ -14,6 +14,7 @@ import {
 } from "./app-settings.ts";
 import { registerTickHandler, unregisterTickHandler, startTicker, stopTicker } from "./client-ticker.ts";
 import { loadCronJobs } from "./controllers/cron.ts";
+import type { PendingContextModelOverride } from "./context-meter.ts";
 import { handleAgentEvent, resetToolStream, type AgentEventPayload } from "./app-tool-stream.ts";
 import { debugLog, isDebugEnabled } from "./debug.ts";
 import { loadAgents } from "./controllers/agents.ts";
@@ -63,6 +64,7 @@ type GatewayHost = {
   sessionsIncludeGlobal: boolean;
   sessionsIncludeUnknown: boolean;
   chatRunId: string | null;
+  pendingContextModelOverride: PendingContextModelOverride | null;
   refreshSessionsAfterChat: Set<string>;
   execApprovalQueue: ExecApprovalRequest[];
   execApprovalError: string | null;
@@ -305,16 +307,30 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
       // 实测落盘稳定在 ~500ms 后完成，后续 800/1200ms 兜底，任一次拿到新值即停。总窗口 ~2.5s。
       if (state === "final") {
         const refreshKey = payload?.sessionKey ?? host.sessionKey;
-        const readTokens = () =>
+        // loadSessions() 会替换 sessionsResult；每轮比较都要从最新快照重新取当前会话。
+        const readUsageRow = () =>
           (host as unknown as OpenClawApp).sessionsResult?.sessions?.find(
             (r) => r.key === refreshKey,
-          )?.totalTokens ?? null;
-        const baseline = readTokens();
+          );
+        // 同时比较 totalTokens 和 contextTokens：前者代表新 usage，后者代表本轮实际模型窗口。
+        const readUsage = () => {
+          const row = readUsageRow();
+          return row ? `${row.totalTokens ?? ""}:${row.contextTokens ?? ""}` : null;
+        };
+        // final 到达时 gateway 可能还没持久化，本值作为“旧快照”供后续轮询判断。
+        const baseline = readUsage();
         void (async () => {
           for (const delay of [500, 800, 1200]) {
             await new Promise((r) => setTimeout(r, delay));
             await loadSessions(host as unknown as OpenClawApp);
-            if (readTokens() !== baseline) return;
+            // loadSessions 后重新读取；只有确认用量快照变化，才清掉 UI 侧临时模型覆盖。
+            if (readUsage() !== baseline) {
+              // 新一轮用量已落到 sessions，回到 gateway 持久化的 contextTokens。
+              if (host.pendingContextModelOverride?.sessionKey === refreshKey) {
+                host.pendingContextModelOverride = null;
+              }
+              return;
+            }
           }
         })();
       }

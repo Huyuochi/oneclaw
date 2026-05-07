@@ -14,7 +14,10 @@ import { icons } from "../icons.ts";
 import { t } from "../i18n.ts";
 import { detectTextDirection } from "../text-direction.ts";
 import { renderMarkdownSidebar } from "./markdown-sidebar.ts";
-import { extractModelId, lookupContextWindow } from "../context-window.ts";
+import {
+  resolveContextMeterMax,
+  type PendingContextModelOverride,
+} from "../context-meter.ts";
 import "../components/resizable-divider.ts";
 import { computeStopButtonVisible } from "./chat-stop-button-gate.ts";
 
@@ -60,6 +63,7 @@ export type ChatProps = {
   // 模型选择器
   configuredModels?: ConfiguredModel[];
   currentModel?: string | null;
+  pendingContextModelOverride?: PendingContextModelOverride | null;
   onModelChange?: (modelKey: string) => void;
   // 思考开关
   thinkingToggleLevel?: string;
@@ -108,13 +112,11 @@ function adjustTextareaHeight(el: HTMLTextAreaElement, deferred = false) {
  *   - used = session.totalTokens（最后一次调用的 prompt token 数，gateway 在
  *            turn 结束后持久化）
  *   - max  = session.contextTokens（gateway 按调用时用的模型写入的窗口大小）
- *            缺失或模型已被切换时回退到 lookupContextWindow(currentModel)
+ *            缺失时回退到 lookupContextWindow(session.model ?? currentModel)
  * 仅展示「当前会话」占用比例，跨会话独立；模型未知且 used>0 时整体隐藏。
  *
- * 模型切换的陷阱：session.contextTokens 要等到用户在新模型上发完一轮后
- * gateway 才会覆写。切换后到下一次 chat.final 之间的空窗里，存储值仍是
- * 旧模型的窗口——这时 session.model 和 currentModel 的 bare id 不一致，
- * 直接忽略 session.contextTokens，优先走 UI 侧静态表让分母立刻跟上新模型。
+ * 模型切换的陷阱：只有同会话的 pending override 能临时覆盖 contextTokens；
+ * 跨会话时不信任全局 currentModel，避免拿上一个会话的模型当分母。
  */
 function contextMeterText(
   key: string,
@@ -129,20 +131,12 @@ function contextMeterText(
 function renderContextMeter(
   session: GatewaySessionRow | null | undefined,
   currentModel: string | null | undefined,
+  pendingOverride: PendingContextModelOverride | null | undefined,
 ) {
   if (!session) return nothing;
   const used = typeof session.totalTokens === "number" ? session.totalTokens : 0;
   if (used <= 0) return nothing;
-  const sessionModelId = extractModelId(typeof session.model === "string" ? session.model : "");
-  const currentModelId = extractModelId(currentModel);
-  const modelChanged =
-    sessionModelId !== "" && currentModelId !== "" && sessionModelId !== currentModelId;
-  const sessionMax =
-    !modelChanged && typeof session.contextTokens === "number" && session.contextTokens > 0
-      ? session.contextTokens
-      : null;
-  const fallbackMax = lookupContextWindow(currentModel);
-  const max = sessionMax ?? fallbackMax ?? 0;
+  const max = resolveContextMeterMax(session, currentModel, pendingOverride) ?? 0;
   if (max <= 0) return nothing;
   const ratio = Math.min(1, Math.max(0, used / max));
   const widthPct = (ratio * 100).toFixed(1);
@@ -647,7 +641,11 @@ export function renderChat(props: ChatProps) {
             }
           </div>
           <div class="chat-compose__toolbar-right">
-            ${renderContextMeter(activeSession, props.currentModel)}
+            ${renderContextMeter(
+              activeSession,
+              props.currentModel,
+              props.pendingContextModelOverride,
+            )}
             ${isBusy && canAbort
               ? html`<button
                   class="chat-compose__send-btn"

@@ -81,6 +81,7 @@ import {
 } from "./app-tool-stream.ts";
 import { resolveInjectedAssistantIdentity } from "./assistant-identity.ts";
 import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./controllers/assistant-identity.ts";
+import type { PendingContextModelOverride } from "./context-meter.ts";
 import { getLocale, t } from "./i18n.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
 import { type ChatAttachment, type ChatQueueItem, type ConfiguredModel, type CronFormState } from "./ui-types.ts";
@@ -210,6 +211,7 @@ export class OpenClawApp extends LitElement {
     chatAttachments: { state: true },
     configuredModels: { state: true },
     currentModel: { state: true },
+    pendingContextModelOverride: { state: true },
     thinkingLevel: { state: true },
     thinkingLevels: { state: true },
     isBinaryThinking: { state: true },
@@ -447,6 +449,7 @@ export class OpenClawApp extends LitElement {
   chatAttachments: ChatAttachment[] = [];
   configuredModels: ConfiguredModel[] = [];
   currentModel: string | null = null;
+  pendingContextModelOverride: PendingContextModelOverride | null = null;
   thinkingLevel: string = "off";
   thinkingLevels: string[] = [];
   isBinaryThinking: boolean = false;
@@ -1051,12 +1054,15 @@ export class OpenClawApp extends LitElement {
     if (!this.client || !this.connected) {
       return;
     }
+    // 仅当前会话可用，避免 context meter 跨会话误用全局 currentModel。
+    this.pendingContextModelOverride = { sessionKey: this.sessionKey, model: modelKey };
     try {
       await this.client.request("sessions.patch", {
         key: this.sessionKey,
         model: modelKey,
       });
     } catch (err) {
+      this.pendingContextModelOverride = null;
       this.lastError = String(err);
     }
     this.updateThinkingCapabilities();
