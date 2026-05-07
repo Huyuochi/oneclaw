@@ -1,10 +1,12 @@
 import type { ChatState } from "./controllers/chat.ts";
+import type { PendingContextModelOverride } from "./context-meter.ts";
 import type { UiSettings } from "./storage.ts";
 
 export type SessionTransitionHost = ChatState & {
   chatQueue: unknown[];
   chatAvatarUrl: string | null;
   settings: UiSettings;
+  pendingContextModelOverride?: PendingContextModelOverride | null;
   applySettings(next: UiSettings): void;
   resetToolStream(): void;
   resetChatScroll(): void;
@@ -44,6 +46,7 @@ export function applySessionKeyTransition(
   host.chatRunId = null;
   host.chatQueue = [];
   host.chatAvatarUrl = null;
+  host.pendingContextModelOverride = null;
   host.resetToolStream();
   host.resetChatScroll();
   host.applySettings({

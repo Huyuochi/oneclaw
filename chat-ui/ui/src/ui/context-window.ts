@@ -9,11 +9,13 @@
  *
  * 具体选取逻辑见 views/chat.ts renderContextMeter()。
  *
- * 目前覆盖 Kimi（Moonshot）和 Claude 系列；未命中任何规则时返回 null，
- * UI 降级为纯 token 计数、不显示百分比。
+ * 目前覆盖 Kimi（Moonshot）、Claude、OpenAI GPT-4o、Gemini 2.0、
+ * DeepSeek、Qwen 的常见窗口；未命中任何规则时返回 null，
+ * UI 降级为不显示 meter。
  *
- * 接受 `providerKey/modelId` 复合键（{@link ConfiguredModel.key} 格式）或裸
- * modelId。匹配不区分大小写，顺序敏感——更具体的规则须排在前面。
+ * 接受 `providerKey/modelId` 复合键（{@link ConfiguredModel.key} 格式）、
+ * `provider/vendor/modelId` 复合键或裸 modelId。匹配不区分大小写，顺序敏感——
+ * 更具体的规则须排在前面。
  */
 
 type ContextWindowRule = {
@@ -42,21 +44,32 @@ const CONTEXT_WINDOW_RULES: readonly ContextWindowRule[] = [
 
   // Claude default — 200k
   { pattern: /^claude-/i, tokens: 200_000 },
+
+  // Mainstream provider fallbacks used before gateway persists contextTokens
+  { pattern: /^gpt-4o(?:-|$)/i, tokens: 128_000 },
+  { pattern: /^gemini-2\.0(?:-|$)/i, tokens: 1_000_000 },
+  { pattern: /^deepseek-.*128k(?:-|$)/i, tokens: 128_000 },
+  { pattern: /^deepseek-.*64k(?:-|$)/i, tokens: 64_000 },
+  { pattern: /^deepseek-/i, tokens: 64_000 },
+  { pattern: /^qwen.*256k(?:-|$)/i, tokens: 256_000 },
+  { pattern: /^qwen-long(?:-|$)/i, tokens: 256_000 },
+  { pattern: /^qwen.*32k(?:-|$)/i, tokens: 32_000 },
+  { pattern: /^qwen/i, tokens: 32_000 },
 ];
 
 /**
- * Extract the model id from a `providerKey/modelId` composite, or return the
- * input unchanged if it does not contain a slash.
+ * Extract the model id from a slash-delimited composite key, or return the input
+ * unchanged if it does not contain a slash.
  */
 export function extractModelId(input: string | null | undefined): string {
   if (!input) return "";
-  const idx = input.indexOf("/");
+  const idx = input.lastIndexOf("/");
   return idx === -1 ? input : input.slice(idx + 1);
 }
 
 /**
  * Look up the context window (in tokens) for a given model. Accepts either
- * `providerKey/modelId` or a bare `modelId`. Returns null when no rule matches.
+ * a slash-delimited composite key or a bare `modelId`. Returns null when no rule matches.
  */
 export function lookupContextWindow(
   modelKey: string | null | undefined,

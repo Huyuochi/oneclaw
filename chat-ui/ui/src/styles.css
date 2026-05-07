@@ -7759,10 +7759,7 @@ img.chat-avatar {
   color: var(--text-on-accent);
   background: rgba(0, 0, 0, 0.78);
   border-radius: var(--radius-xs);
-  max-width: min(280px, calc(100vw - 24px));
-  white-space: pre-line;
-  text-align: left;
-  word-break: break-word;
+  white-space: nowrap;
   pointer-events: none;
   opacity: 0;
   transition: opacity 150ms ease;
@@ -7838,6 +7835,8 @@ img.chat-avatar {
   line-height: 1.45;
   max-width: min(700px, calc(100vw - 24px));
   width: max-content;
+  white-space: pre-line;
+  text-align: left;
 }
 
 .workspace__header-btn svg {

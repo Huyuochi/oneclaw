@@ -15,7 +15,7 @@ import { t } from "../i18n.ts";
 import { detectTextDirection } from "../text-direction.ts";
 import { renderMarkdownSidebar } from "./markdown-sidebar.ts";
 import {
-  resolveContextMeterMax,
+  resolveContextMeterStats,
   type PendingContextModelOverride,
 } from "../context-meter.ts";
 import "../components/resizable-divider.ts";
@@ -112,7 +112,7 @@ function adjustTextareaHeight(el: HTMLTextAreaElement, deferred = false) {
  *   - used = session.totalTokens（最后一次调用的 prompt token 数，gateway 在
  *            turn 结束后持久化）
  *   - max  = session.contextTokens（gateway 按调用时用的模型写入的窗口大小）
- *            缺失时回退到 lookupContextWindow(session.model ?? currentModel)
+ *            缺失时回退到 lookupContextWindow(session.model)，不跨会话信任 currentModel
  * 仅展示「当前会话」占用比例，跨会话独立；模型未知且 used>0 时整体隐藏。
  *
  * 模型切换的陷阱：只有同会话的 pending override 能临时覆盖 contextTokens；
@@ -130,21 +130,15 @@ function contextMeterText(
 
 function renderContextMeter(
   session: GatewaySessionRow | null | undefined,
-  currentModel: string | null | undefined,
   pendingOverride: PendingContextModelOverride | null | undefined,
 ) {
   if (!session) return nothing;
-  const used = typeof session.totalTokens === "number" ? session.totalTokens : 0;
-  if (used <= 0) return nothing;
-  const max = resolveContextMeterMax(session, currentModel, pendingOverride) ?? 0;
-  if (max <= 0) return nothing;
-  const ratio = Math.min(1, Math.max(0, used / max));
-  const widthPct = (ratio * 100).toFixed(1);
-  const percent = Math.round(ratio * 100);
+  const stats = resolveContextMeterStats(session, pendingOverride);
+  if (!stats) return nothing;
   const values = {
-    percent: String(percent),
-    used: used.toLocaleString(),
-    max: max.toLocaleString(),
+    percent: String(stats.percent),
+    used: stats.used.toLocaleString(),
+    max: stats.max.toLocaleString(),
   };
   const label = contextMeterText("chat.contextMeterAria", values);
   const title = contextMeterText("chat.contextMeterHint", values);
@@ -156,9 +150,9 @@ function renderContextMeter(
         aria-label=${label}
         aria-valuemin="0"
         aria-valuemax="100"
-        aria-valuenow=${String(percent)}
+        aria-valuenow=${String(stats.percent)}
       >
-        <div class="chat-compose__ctx-meter-fill" style=${`width: ${widthPct}%`}></div>
+        <div class="chat-compose__ctx-meter-fill" style=${`width: ${stats.widthPct}%`}></div>
       </div>
     </div>
   `;
@@ -641,11 +635,7 @@ export function renderChat(props: ChatProps) {
             }
           </div>
           <div class="chat-compose__toolbar-right">
-            ${renderContextMeter(
-              activeSession,
-              props.currentModel,
-              props.pendingContextModelOverride,
-            )}
+            ${renderContextMeter(activeSession, props.pendingContextModelOverride)}
             ${isBusy && canAbort
               ? html`<button
                   class="chat-compose__send-btn"

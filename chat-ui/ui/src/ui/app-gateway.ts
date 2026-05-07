@@ -33,6 +33,12 @@ import { loadSessions } from "./controllers/sessions.ts";
 import { GatewayBrowserClient } from "./gateway.ts";
 import { applySessionKeyTransition } from "./session-transition.ts";
 import { resolveVisibleSessionSelection } from "./session-visibility.ts";
+import {
+  shouldClearContextOverrideAfterUsageRefresh,
+  shouldClearPendingContextModelOverride,
+  shouldFinishUsageRefreshAttempt,
+  shouldRefreshSessionsForChatState,
+} from "./usage-refresh.ts";
 
 type GatewayHost = {
   settings: UiSettings;
@@ -65,7 +71,6 @@ type GatewayHost = {
   sessionsIncludeUnknown: boolean;
   chatRunId: string | null;
   pendingContextModelOverride: PendingContextModelOverride | null;
-  refreshSessionsAfterChat: Set<string>;
   execApprovalQueue: ExecApprovalRequest[];
   execApprovalError: string | null;
 };
@@ -294,46 +299,61 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
       );
     }
     const state = handleChatEvent(host as unknown as OpenClawApp, payload);
-    if (state === "final" || state === "error" || state === "aborted") {
+    if (shouldRefreshSessionsForChatState(state)) {
       resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
       void flushChatQueueForEvent(host as unknown as Parameters<typeof flushChatQueueForEvent>[0]);
-      const runId = payload?.runId;
-      if (runId && host.refreshSessionsAfterChat.has(runId)) {
-        host.refreshSessionsAfterChat.delete(runId);
-      }
-      // 每轮 chat 结束都刷新 sessions，让 context meter 的 token 数及时更新。
-      // gateway 在 emit chat.final 之后才 await persistRunSessionUsage —— 也就是说
-      // 客户端收到 final 的那一刻，新的 totalTokens 在 gateway 内存里都还没写入。
-      // 实测落盘稳定在 ~500ms 后完成，后续 800/1200ms 兜底，任一次拿到新值即停。总窗口 ~2.5s。
-      if (state === "final") {
-        const refreshKey = payload?.sessionKey ?? host.sessionKey;
-        // loadSessions() 会替换 sessionsResult；每轮比较都要从最新快照重新取当前会话。
-        const readUsageRow = () =>
-          (host as unknown as OpenClawApp).sessionsResult?.sessions?.find(
-            (r) => r.key === refreshKey,
+      // 每轮 chat 终态都刷新 sessions，让 context meter 的 token 数/模型窗口及时更新。
+      // final 到达时 gateway 可能还没持久化 usage；error/aborted 也复用同一兜底窗口，
+      // 避免模型切换后网络中断导致 pending override 长期停留。
+      const refreshKey = payload?.sessionKey ?? host.sessionKey;
+      // loadSessions() 会替换 sessionsResult；每轮比较都要从最新快照重新取当前会话。
+      const readUsageRow = () =>
+        (host as unknown as OpenClawApp).sessionsResult?.sessions?.find(
+          (r) => r.key === refreshKey,
+        );
+      // 同时比较 totalTokens 和 contextTokens：前者代表新 usage，后者代表本轮实际模型窗口。
+      const readUsage = () => {
+        const row = readUsageRow();
+        return row ? `${row.totalTokens ?? ""}:${row.contextTokens ?? ""}` : null;
+      };
+      // 终态到达时 gateway 可能还没持久化，本值作为“旧快照”供后续轮询判断。
+      const baseline = readUsage();
+      const overrideAtStart = host.pendingContextModelOverride;
+      const terminalRunId = payload?.runId ?? null;
+      void (async () => {
+        const delays = [700, 1500];
+        for (const [i, delay] of delays.entries()) {
+          await new Promise((r) => setTimeout(r, delay));
+          await loadSessions(host as unknown as OpenClawApp);
+          // loadSessions 后重新读取；baseline 缺失时不把第一条旧 row 当成“新 usage”。
+          const currentUsage = readUsage();
+          const usageRefreshed = shouldClearContextOverrideAfterUsageRefresh(
+            baseline,
+            currentUsage,
+            readUsageRow(),
+            overrideAtStart,
           );
-        // 同时比较 totalTokens 和 contextTokens：前者代表新 usage，后者代表本轮实际模型窗口。
-        const readUsage = () => {
-          const row = readUsageRow();
-          return row ? `${row.totalTokens ?? ""}:${row.contextTokens ?? ""}` : null;
-        };
-        // final 到达时 gateway 可能还没持久化，本值作为“旧快照”供后续轮询判断。
-        const baseline = readUsage();
-        void (async () => {
-          for (const delay of [500, 800, 1200]) {
-            await new Promise((r) => setTimeout(r, delay));
-            await loadSessions(host as unknown as OpenClawApp);
-            // loadSessions 后重新读取；只有确认用量快照变化，才清掉 UI 侧临时模型覆盖。
-            if (readUsage() !== baseline) {
-              // 新一轮用量已落到 sessions，回到 gateway 持久化的 contextTokens。
-              if (host.pendingContextModelOverride?.sessionKey === refreshKey) {
-                host.pendingContextModelOverride = null;
-              }
-              return;
+          if (shouldFinishUsageRefreshAttempt(baseline, currentUsage, i === delays.length - 1)) {
+            // 只有当前终态所属 run 已经刷新到 usage 时，才回到 gateway 持久化窗口。
+            const current = host.pendingContextModelOverride;
+            if (
+              current &&
+              shouldClearPendingContextModelOverride(
+                current,
+                {
+                  sessionKey: refreshKey,
+                  model: current.model,
+                  runId: terminalRunId,
+                },
+                usageRefreshed,
+              )
+            ) {
+              host.pendingContextModelOverride = null;
             }
+            return;
           }
-        })();
-      }
+        }
+      })();
     }
     if (state === "final") {
       void loadChatHistory(host as unknown as OpenClawApp);

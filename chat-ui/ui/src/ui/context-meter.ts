@@ -4,6 +4,15 @@ import type { GatewaySessionRow } from "./types.ts";
 export type PendingContextModelOverride = {
   sessionKey: string;
   model: string;
+  runId?: string | null;
+};
+
+export type ContextMeterStats = {
+  used: number;
+  max: number;
+  ratio: number;
+  percent: number;
+  widthPct: string;
 };
 
 function positiveTokenCount(value: unknown): number | null {
@@ -26,7 +35,6 @@ function activePendingModel(
 
 export function resolveContextMeterMax(
   session: GatewaySessionRow,
-  currentModel: string | null | undefined,
   pendingOverride?: PendingContextModelOverride | null,
 ): number | null {
   const pendingModel = activePendingModel(session, pendingOverride);
@@ -40,5 +48,25 @@ export function resolveContextMeterMax(
     return sessionMax;
   }
 
-  return lookupContextWindow(sessionModel(session) ?? currentModel);
+  return lookupContextWindow(sessionModel(session));
+}
+
+export function resolveContextMeterStats(
+  session: GatewaySessionRow,
+  pendingOverride?: PendingContextModelOverride | null,
+): ContextMeterStats | null {
+  const used = Math.max(0, typeof session.totalTokens === "number" ? session.totalTokens : 0);
+  const max = resolveContextMeterMax(session, pendingOverride) ?? 0;
+  if (max <= 0) {
+    return null;
+  }
+  const ratio = Math.min(1, used / max);
+  const percent = Math.round(ratio * 100);
+  return {
+    used,
+    max,
+    ratio,
+    percent,
+    widthPct: (ratio * 100).toFixed(1),
+  };
 }

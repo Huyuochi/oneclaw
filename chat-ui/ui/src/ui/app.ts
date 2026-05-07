@@ -691,7 +691,6 @@ export class OpenClawApp extends LitElement {
   private logsScrollFrame: number | null = null;
   private toolStreamById = new Map<string, ToolStreamEntry>();
   private toolStreamOrder: string[] = [];
-  refreshSessionsAfterChat = new Set<string>();
   basePath = "";
   private popStateHandler = () =>
     onPopStateInternal(this as unknown as Parameters<typeof onPopStateInternal>[0]);
@@ -1055,7 +1054,7 @@ export class OpenClawApp extends LitElement {
       return;
     }
     // 仅当前会话可用，避免 context meter 跨会话误用全局 currentModel。
-    this.pendingContextModelOverride = { sessionKey: this.sessionKey, model: modelKey };
+    this.pendingContextModelOverride = { sessionKey: this.sessionKey, model: modelKey, runId: null };
     try {
       await this.client.request("sessions.patch", {
         key: this.sessionKey,

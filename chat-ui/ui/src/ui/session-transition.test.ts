@@ -28,9 +28,9 @@ function makeHost() {
     chatVisibleMessageCount: 7,
     chatQueue: [{ id: "queued" }],
     chatAvatarUrl: "https://example.com/avatar.png",
+    pendingContextModelOverride: { sessionKey: "session-a", model: "openai/gpt-4o" },
     basePath: "",
     hello: null,
-    refreshSessionsAfterChat: new Set<string>(),
     sessionsResult: null,
     lastError: null,
     applySettings(next: Record<string, unknown>) {
@@ -77,6 +77,7 @@ async function testApplySessionKeyTransitionResetsComposerState() {
   assert.equal(ctx.host.chatRunId, null);
   assert.deepEqual(ctx.host.chatQueue, []);
   assert.equal(ctx.host.chatAvatarUrl, null);
+  assert.equal(ctx.host.pendingContextModelOverride, null);
   assert.equal(ctx.host.settings.sessionKey, "session-b");
   assert.equal(ctx.host.settings.lastActiveSessionKey, "session-b");
   assert.equal(ctx.assistantLoads, 1);
