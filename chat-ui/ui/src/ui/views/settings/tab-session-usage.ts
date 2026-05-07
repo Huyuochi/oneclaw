@@ -9,6 +9,9 @@ import { t, tWithDetail } from "../../i18n.ts";
 import "../../components/message-box.ts";
 
 const MAX_ROWS = 200;
+// Over-fetch because archived/reset transcripts are filtered client-side after
+// the gateway applies its limit; the UI still displays at most MAX_ROWS rows.
+const FETCH_ROWS = 500;
 
 interface SessionUsageRow {
   agent: string;
@@ -115,7 +118,7 @@ async function init(state: AppViewState) {
     const payload = await client.request("sessions.usage", {
       startDate: "1970-01-01",
       endDate: todayDateStringUtc(),
-      limit: MAX_ROWS,
+      limit: FETCH_ROWS,
     });
     s.rows = mapEntries(payload);
     s.error = null;
