@@ -2389,6 +2389,7 @@ async function downloadOfficeCli(platform, arch, targetBase) {
   const cachedBin = path.join(cacheDir, assetName);
   const cachedSums = path.join(cacheDir, "SHA256SUMS");
   const { createHash } = require("crypto");
+  const { pipeline } = require("node:stream/promises");
 
   const ensureCachedSums = async () => {
     if (!fs.existsSync(cachedSums)) {
@@ -2406,22 +2407,46 @@ async function downloadOfficeCli(platform, arch, targetBase) {
     return expectedLine.trim().split(/\s+/)[0];
   };
 
-  const hashFile = (filePath) => createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+  const hashFile = async (filePath) => {
+    const hash = createHash("sha256");
+    await pipeline(fs.createReadStream(filePath), hash);
+    return hash.digest("hex");
+  };
 
-  // 增量检测：stamp 只作为候选命中，仍需确认输出文件存在且内容匹配当前版本校验和。
+  const readOutputState = () => {
+    const stat = fs.statSync(outputBin, { bigint: true });
+    return {
+      size: stat.size.toString(),
+      mtimeNs: stat.mtimeNs.toString(),
+      ctimeNs: stat.ctimeNs.toString(),
+    };
+  };
+
+  // 增量检测：stamp 内嵌期望 hash 与文件变更元数据，命中时只比对便宜元数据，
+  // 避免每次构建都拉取 SHA256SUMS 或重新对 60MB 二进制做全量哈希。
   const stampFile = path.join(outputDir, ".officecli-stamp");
-  const stampValue = `${version}-${platform}-${arch}`;
-  if (fs.existsSync(stampFile) && fs.readFileSync(stampFile, "utf-8").trim() === stampValue) {
-    if (fs.existsSync(outputBin)) {
-      await ensureCachedSums();
-      if (hashFile(outputBin) === readExpectedHash()) {
-        log(`OfficeCLI 已是 ${stampValue}，跳过`);
-        return;
+  const stampPrefix = `${version}-${platform}-${arch}`;
+  if (fs.existsSync(stampFile)) {
+    const rawStamp = fs.readFileSync(stampFile, "utf-8").trim();
+    const parts = rawStamp.split("|");
+    if (parts.length === 5 && parts[0] === stampPrefix) {
+      const [, stampHash, stampSize, stampMtimeNs, stampCtimeNs] = parts;
+      if (fs.existsSync(outputBin)) {
+        const actual = readOutputState();
+        if (
+          actual.size === stampSize &&
+          actual.mtimeNs === stampMtimeNs &&
+          actual.ctimeNs === stampCtimeNs
+        ) {
+          log(`OfficeCLI 已是 ${stampPrefix} (sha256=${stampHash.slice(0, 12)}…)，跳过`);
+          return;
+        }
+        log(`OfficeCLI stamp 匹配但输出文件已变化，重新写入`);
+      } else {
+        log("OfficeCLI stamp 匹配但输出文件缺失，重新写入");
       }
-      log("OfficeCLI stamp 匹配但输出校验失败，重新写入");
-    } else {
-      log("OfficeCLI stamp 匹配但输出文件缺失，重新写入");
     }
+    // 旧格式或 prefix 不匹配：直接走完整下载流程，最后写入新格式 stamp。
   }
 
   // 下载 SHA256SUMS（每版本只下一次）
@@ -2437,7 +2462,7 @@ async function downloadOfficeCli(platform, arch, targetBase) {
   }
 
   // SHA256 校验
-  const hash = hashFile(cachedBin);
+  const hash = await hashFile(cachedBin);
   const expectedHash = readExpectedHash();
   if (hash !== expectedHash) {
     // 校验失败，清除缓存重试
@@ -2455,8 +2480,12 @@ async function downloadOfficeCli(platform, arch, targetBase) {
     fs.chmodSync(outputBin, 0o755);
   }
 
-  // 写入版本戳
-  fs.writeFileSync(stampFile, stampValue);
+  // 写入版本戳：包含期望 hash 与文件变更元数据，下次命中时无需联网或重新哈希。
+  const outputState = readOutputState();
+  fs.writeFileSync(
+    stampFile,
+    `${stampPrefix}|${expectedHash}|${outputState.size}|${outputState.mtimeNs}|${outputState.ctimeNs}`
+  );
   log(`OfficeCLI v${version} → ${path.relative(ROOT, outputBin)}`);
 }
 
