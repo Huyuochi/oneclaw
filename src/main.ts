@@ -273,8 +273,9 @@ function migrateAgentTimeout(): void {
     config.agents.defaults.timeoutSeconds = 1200;
     writeUserConfig(config);
     log.info("[migrate] 已设置默认 agent 超时: 1200s (20min)");
-  } catch {
-    // 迁移失败不阻塞启动
+  } catch (err) {
+    // 迁移失败不阻塞启动；记录警告便于事后排查
+    log.warn(`[migrate] migrateAgentTimeout 失败: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -289,9 +290,10 @@ function migrateSubagentTimeout(): void {
     config.agents.defaults.subagents ??= {};
     config.agents.defaults.subagents.runTimeoutSeconds = 900;
     writeUserConfig(config);
-    log.info("[migrate] 已设置默认子 agent 超时: 600s (10min)");
-  } catch {
-    // 迁移失败不阻塞启动
+    log.info("[migrate] 已设置默认子 agent 超时: 900s (15min)");
+  } catch (err) {
+    // 迁移失败不阻塞启动；记录警告便于事后排查
+    log.warn(`[migrate] migrateSubagentTimeout 失败: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 

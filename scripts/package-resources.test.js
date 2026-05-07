@@ -9,7 +9,13 @@ const vm = require("node:vm");
 function loadPackageResourcesSandbox(options = {}) {
   const scriptPath = path.join(__dirname, "package-resources.js");
   const rawSource = fs.readFileSync(scriptPath, "utf-8");
-  const source = rawSource.replace(/\nmain\(\)\.catch\(\(err\) => \{\n[\s\S]*?\n\}\);\s*$/, "\n");
+  let source = rawSource.replace(/\nmain\(\)\.catch\(\(err\) => \{\n[\s\S]*?\n\}\);\s*$/, "\n");
+  if (options.rootDir) {
+    source = source.replace(
+      'const ROOT = path.resolve(__dirname, "..");',
+      `const ROOT = ${JSON.stringify(options.rootDir)};`
+    );
+  }
   const sandboxProcess = options.process || Object.assign(Object.create(process), {
     argv: process.argv.slice(),
     env: { ...process.env },
@@ -182,6 +188,49 @@ test("build-release workflow 应把 Volcano 必填环境变量映射到构建进
   assert.match(workflow, /^\s*VOLCANO_APP_ID:\s+\$\{\{\s*secrets\.VOLCANO_APP_ID\s*\}\}/m);
   assert.match(workflow, /^\s*VOLCANO_APP_KEY:\s+\$\{\{\s*secrets\.VOLCANO_APP_KEY\s*\}\}/m);
   assert.match(workflow, /^\s*VOLCANO_ENDPOINT:\s+\$\{\{\s*secrets\.VOLCANO_ENDPOINT\s*\}\}/m);
+});
+
+test("downloadOfficeCli 不应因 stamp 匹配而跳过缺失的输出文件", async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "oneclaw-officecli-missing-"));
+  const version = "1.2.3";
+  const assetName = "officecli-mac-arm64";
+  const cachedContent = "expected officecli\n";
+  const hash = require("node:crypto").createHash("sha256").update(cachedContent).digest("hex");
+
+  writeFixture(path.join(tmpRoot, "package.json"), JSON.stringify({ oneclaw: { officecli: version } }));
+  writeFixture(path.join(tmpRoot, ".cache", "officecli", version, assetName), cachedContent);
+  writeFixture(path.join(tmpRoot, ".cache", "officecli", version, "SHA256SUMS"), `${hash}  ${assetName}\n`);
+
+  const targetBase = path.join(tmpRoot, "resources", "targets", "darwin-arm64");
+  writeFixture(path.join(targetBase, "officecli", ".officecli-stamp"), `${version}-darwin-arm64`);
+
+  const sandbox = loadPackageResourcesSandbox({ rootDir: tmpRoot });
+  await sandbox.downloadOfficeCli("darwin", "arm64", targetBase);
+
+  assert.equal(fs.readFileSync(path.join(targetBase, "officecli", "officecli"), "utf-8"), cachedContent);
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+test("downloadOfficeCli 不应因 stamp 匹配而保留 hash 不匹配的输出文件", async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "oneclaw-officecli-stale-"));
+  const version = "1.2.3";
+  const assetName = "officecli-mac-arm64";
+  const cachedContent = "expected officecli\n";
+  const hash = require("node:crypto").createHash("sha256").update(cachedContent).digest("hex");
+
+  writeFixture(path.join(tmpRoot, "package.json"), JSON.stringify({ oneclaw: { officecli: version } }));
+  writeFixture(path.join(tmpRoot, ".cache", "officecli", version, assetName), cachedContent);
+  writeFixture(path.join(tmpRoot, ".cache", "officecli", version, "SHA256SUMS"), `${hash}  ${assetName}\n`);
+
+  const targetBase = path.join(tmpRoot, "resources", "targets", "darwin-arm64");
+  writeFixture(path.join(targetBase, "officecli", ".officecli-stamp"), `${version}-darwin-arm64`);
+  writeFixture(path.join(targetBase, "officecli", "officecli"), "stale officecli\n");
+
+  const sandbox = loadPackageResourcesSandbox({ rootDir: tmpRoot });
+  await sandbox.downloadOfficeCli("darwin", "arm64", targetBase);
+
+  assert.equal(fs.readFileSync(path.join(targetBase, "officecli", "officecli"), "utf-8"), cachedContent);
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
 // 白名单裁剪必须深入保留插件内部继续清垃圾，而不是把整个 extensions 目录豁免掉。

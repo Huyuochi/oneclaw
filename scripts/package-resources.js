@@ -1137,7 +1137,10 @@ function patchAsarBoundaryCheck(gatewayDir) {
 // ─── Step 2.5: 注入 bundled 插件（kimi-claw + kimi-search） ───
 
 // 把仓库 builtin-skills/ 下的 skill 注入 openclaw bundled skills 目录。
-// 必须在 pruneOpenclawSkills() 之后调用，否则会被白名单裁掉。
+// 调用顺序约束：必须在 pruneNodeModules() 之后执行 —— pruneNodeModules 的 walk()
+// 会递归触发 pruneOpenclawSkills()（按白名单删除非允许 skill），若注入早于裁剪，
+// 注入的 skill 会因不在白名单而被删除。当前 installDependencies() 在两个分支
+// （cache-hit / 全量安装）中均已按 pruneNodeModules → injectBuiltinSkills 顺序调用。
 function injectBuiltinSkills(gatewayDir) {
   const builtinDir = path.join(__dirname, "..", "builtin-skills");
   if (!fs.existsSync(builtinDir)) return;
@@ -2378,14 +2381,6 @@ async function downloadOfficeCli(platform, arch, targetBase) {
   const outputDir = path.join(targetBase, "officecli");
   const outputBin = path.join(outputDir, platform === "win32" ? "officecli.exe" : "officecli");
 
-  // 增量检测
-  const stampFile = path.join(outputDir, ".officecli-stamp");
-  const stampValue = `${version}-${platform}-${arch}`;
-  if (fs.existsSync(stampFile) && fs.readFileSync(stampFile, "utf-8").trim() === stampValue) {
-    log(`OfficeCLI 已是 ${stampValue}，跳过`);
-    return;
-  }
-
   // 缓存目录
   const cacheDir = path.join(ROOT, ".cache", "officecli", version);
   ensureDir(cacheDir);
@@ -2393,12 +2388,44 @@ async function downloadOfficeCli(platform, arch, targetBase) {
   const baseUrl = `https://github.com/iOfficeAI/OfficeCLI/releases/download/v${version}`;
   const cachedBin = path.join(cacheDir, assetName);
   const cachedSums = path.join(cacheDir, "SHA256SUMS");
+  const { createHash } = require("crypto");
+
+  const ensureCachedSums = async () => {
+    if (!fs.existsSync(cachedSums)) {
+      log("下载 SHA256SUMS ...");
+      await downloadFileWithFallback([`${baseUrl}/SHA256SUMS`], cachedSums);
+    }
+  };
+
+  const readExpectedHash = () => {
+    const sumsContent = fs.readFileSync(cachedSums, "utf-8");
+    const expectedLine = sumsContent.split("\n").find((l) => l.includes(assetName));
+    if (!expectedLine) {
+      die(`SHA256SUMS 中未找到 ${assetName}`);
+    }
+    return expectedLine.trim().split(/\s+/)[0];
+  };
+
+  const hashFile = (filePath) => createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+
+  // 增量检测：stamp 只作为候选命中，仍需确认输出文件存在且内容匹配当前版本校验和。
+  const stampFile = path.join(outputDir, ".officecli-stamp");
+  const stampValue = `${version}-${platform}-${arch}`;
+  if (fs.existsSync(stampFile) && fs.readFileSync(stampFile, "utf-8").trim() === stampValue) {
+    if (fs.existsSync(outputBin)) {
+      await ensureCachedSums();
+      if (hashFile(outputBin) === readExpectedHash()) {
+        log(`OfficeCLI 已是 ${stampValue}，跳过`);
+        return;
+      }
+      log("OfficeCLI stamp 匹配但输出校验失败，重新写入");
+    } else {
+      log("OfficeCLI stamp 匹配但输出文件缺失，重新写入");
+    }
+  }
 
   // 下载 SHA256SUMS（每版本只下一次）
-  if (!fs.existsSync(cachedSums)) {
-    log("下载 SHA256SUMS ...");
-    await downloadFileWithFallback([`${baseUrl}/SHA256SUMS`], cachedSums);
-  }
+  await ensureCachedSums();
 
   // 下载二进制（如果缓存中没有）
   if (fs.existsSync(cachedBin)) {
@@ -2410,14 +2437,8 @@ async function downloadOfficeCli(platform, arch, targetBase) {
   }
 
   // SHA256 校验
-  const { createHash } = require("crypto");
-  const hash = createHash("sha256").update(fs.readFileSync(cachedBin)).digest("hex");
-  const sumsContent = fs.readFileSync(cachedSums, "utf-8");
-  const expectedLine = sumsContent.split("\n").find((l) => l.includes(assetName));
-  if (!expectedLine) {
-    die(`SHA256SUMS 中未找到 ${assetName}`);
-  }
-  const expectedHash = expectedLine.trim().split(/\s+/)[0];
+  const hash = hashFile(cachedBin);
+  const expectedHash = readExpectedHash();
   if (hash !== expectedHash) {
     // 校验失败，清除缓存重试
     safeUnlink(cachedBin);
