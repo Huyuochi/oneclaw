@@ -262,42 +262,6 @@ function migrateSessionMemoryHook(): void {
   }
 }
 
-// 存量用户迁移，避免复杂 skill 执行中途超时。
-// 仅在未配置时写入 1200（20 min），不覆盖用户手动设置的值。
-function migrateAgentTimeout(): void {
-  try {
-    const config = readUserConfig();
-    if (config?.agents?.defaults?.timeoutSeconds != null) return; // 已配置，跳过
-    config.agents ??= {};
-    config.agents.defaults ??= {};
-    config.agents.defaults.timeoutSeconds = 1200;
-    writeUserConfig(config);
-    log.info("[migrate] 已设置默认 agent 超时: 1200s (20min)");
-  } catch (err) {
-    // 迁移失败不阻塞启动；记录警告便于事后排查
-    log.warn(`[migrate] migrateAgentTimeout 失败: ${err instanceof Error ? err.message : String(err)}`);
-  }
-}
-
-// 存量用户迁移：子 agent 超时 15 min。
-// morph-ppt 等 skill 在子 agent 中执行构建脚本，默认超时太短导致构建中断、文件丢失。
-function migrateSubagentTimeout(): void {
-  try {
-    const config = readUserConfig();
-    if (config?.agents?.defaults?.subagents?.runTimeoutSeconds != null) return;
-    config.agents ??= {};
-    config.agents.defaults ??= {};
-    config.agents.defaults.subagents ??= {};
-    config.agents.defaults.subagents.runTimeoutSeconds = 900;
-    writeUserConfig(config);
-    log.info("[migrate] 已设置默认子 agent 超时: 900s (15min)");
-  } catch (err) {
-    // 迁移失败不阻塞启动；记录警告便于事后排查
-    log.warn(`[migrate] migrateSubagentTimeout 失败: ${err instanceof Error ? err.message : String(err)}`);
-  }
-}
-
-
 // 禁止 openclaw gateway 自行检查 npm 更新（OneClaw 整包打包，用户无法独立更新 gateway）
 function migrateDisableGatewayUpdateCheck(): void {
   try {
@@ -919,8 +883,6 @@ app.whenReady().then(async () => {
       migrateDeprecatedDingtalkFields();
       migrateBrowserProfileConfig();
       migrateKimiPluginDeviceId();
-      migrateAgentTimeout();
-      migrateSubagentTimeout();
       void reconcileCliOnAppLaunch().catch((err) => {
         log.error(`[migrate] CLI launch reconciliation failed: ${err instanceof Error ? err.message : String(err)}`);
       });
@@ -936,8 +898,6 @@ app.whenReady().then(async () => {
       migrateDeprecatedDingtalkFields();
       migrateBrowserProfileConfig();
       migrateKimiPluginDeviceId();
-      migrateAgentTimeout();
-      migrateSubagentTimeout();
       void reconcileCliOnAppLaunch().catch((err) => {
         log.error(`[migrate] CLI launch reconciliation failed: ${err instanceof Error ? err.message : String(err)}`);
       });
