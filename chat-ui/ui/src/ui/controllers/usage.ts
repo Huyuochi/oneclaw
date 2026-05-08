@@ -43,11 +43,10 @@ export async function loadUsage(
       state.client.request("sessions.usage", {
         startDate,
         endDate,
-        mode: "gateway",
         limit: 1000, // Cap at 1000 sessions
         includeContextWeight: true,
       }),
-      state.client.request("usage.cost", { startDate, endDate, mode: "gateway" }),
+      state.client.request("usage.cost", { startDate, endDate }),
     ]);
 
     if (sessionsRes) {

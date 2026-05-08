@@ -5,7 +5,6 @@ import "../../components/message-box.ts";
 import { formatTokens } from "../usage-metrics.ts";
 import {
   beginSessionUsageLoad,
-  formatSessionUsageLimitNotice,
   loadSessionUsageSnapshot,
   type SessionUsageRow,
   type UsageTotals,
@@ -101,6 +100,12 @@ function renderRow(row: SessionUsageRow) {
   `;
 }
 
+function renderDetailsBody(rows: SessionUsageRow[], loading: boolean) {
+  if (loading) return html`<div class="oc-session-usage__empty">…</div>`;
+  if (!rows.length) return html`<div class="oc-session-usage__empty">${t("settings.sessionUsage.empty")}</div>`;
+  return html`<div class="oc-session-usage__list">${rows.map(renderRow)}</div>`;
+}
+
 export function renderTabSessionUsage(state: AppViewState) {
   // Reset on disconnect so a stale "load failed" doesn't persist after the gateway comes back.
   if (s.wasConnected && !state.connected) s.initialized = false;
@@ -111,19 +116,12 @@ export function renderTabSessionUsage(state: AppViewState) {
     <div class="oc-settings__section">
       <h2 class="oc-settings__section-title">${t("settings.sessionUsage.pageTitle")}</h2>
       <p class="oc-settings__hint">${t("settings.sessionUsage.pageDesc")}</p>
-      <p class="oc-settings__hint oc-session-usage__limit-hint">
-        ${formatSessionUsageLimitNotice(t("settings.sessionUsage.limitHint"))}
-      </p>
+
+      ${s.totals && s.rows.length ? renderTotals(s.totals) : nothing}
 
       <div class="oc-settings__card">
-        ${s.loading
-          ? html`<div class="oc-session-usage__empty">…</div>`
-          : s.rows.length
-            ? html`
-                ${s.totals ? renderTotals(s.totals) : nothing}
-                <div class="oc-session-usage__list">${s.rows.map(renderRow)}</div>
-              `
-            : html`<div class="oc-session-usage__empty">${t("settings.sessionUsage.empty")}</div>`}
+        <div class="oc-settings__card-title">${t("settings.sessionUsage.details.title")}</div>
+        ${renderDetailsBody(s.rows, s.loading)}
       </div>
 
       <oc-message-box .message=${s.error ?? ""} .type=${"error"} .visible=${!!s.error}></oc-message-box>
@@ -137,14 +135,9 @@ styleSheet.replaceSync(/* css */`
     display: flex;
     flex-direction: column;
     gap: 6px;
-    padding: 12px 14px;
-    margin-bottom: 12px;
-    border: 1px solid var(--border-strong, var(--border, #d4d4d8));
-    border-radius: var(--radius-md, 10px);
-    background: var(--bg-input, #f5f5f5);
-  }
-  .oc-session-usage__limit-hint {
-    margin-top: -4px;
+    padding: 0 2px;
+    margin-bottom: 16px;
+    background: transparent;
   }
   .oc-session-usage__totals-label {
     font-size: 12px;
@@ -165,28 +158,25 @@ styleSheet.replaceSync(/* css */`
   .oc-session-usage__list {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 0;
   }
   .oc-session-usage__row {
     display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 12px 14px;
-    border: 1px solid var(--border-strong, var(--border, #d4d4d8));
-    border-radius: var(--radius-md, 10px);
-    background: var(--bg-secondary, #fbfbfb);
-    box-shadow: none;
-    transition: background var(--duration-fast, 0.12s) ease, border-color var(--duration-fast, 0.12s) ease;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border, #e4e4e7);
+    background: transparent;
   }
-  .oc-session-usage__row:hover {
-    background: var(--bg-hover, #ebebeb);
-    border-color: var(--border-strong, var(--border, #d4d4d8));
-  }
+  .oc-session-usage__row:last-child { border-bottom: none; }
   .oc-session-usage__row-head {
     display: flex;
     align-items: center;
     gap: 10px;
     min-width: 0;
+    flex: 1 1 auto;
   }
   .oc-session-usage__badge {
     font-size: 11.5px;
@@ -224,7 +214,7 @@ styleSheet.replaceSync(/* css */`
     flex-wrap: wrap;
     align-items: center;
     gap: 6px;
-    padding-top: 2px;
+    flex-shrink: 0;
     font-size: 12.5px;
     color: var(--text-secondary, #71717a);
     font-variant-numeric: tabular-nums;

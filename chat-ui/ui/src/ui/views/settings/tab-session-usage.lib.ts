@@ -3,9 +3,6 @@
  * pulling in Lit decorators / DOM-side custom-element registrations.
  */
 
-export const FETCH_LIMIT = 500;
-export const WINDOW_DAYS = 90;
-
 // cacheWrite is intentionally NOT tracked here. KIMI / Moonshot APIs never
 // report it, so even with client-side estimation the column was inconsistent
 // across providers and didn't aid the user. Removed by design — not missing.
@@ -87,42 +84,13 @@ function sumDisplayedTotals(rows: SessionUsageRow[]): UsageTotals | null {
   return { input, output, cacheRead };
 }
 
-export function todayDateStringLocal(now: Date = new Date()): string {
-  const y = now.getFullYear().toString().padStart(4, "0");
-  const m = (now.getMonth() + 1).toString().padStart(2, "0");
-  const d = now.getDate().toString().padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-export function windowStartDateLocal(now: Date, days = WINDOW_DAYS): string {
-  const d = new Date(now);
-  d.setDate(d.getDate() - (days - 1));
-  return todayDateStringLocal(d);
-}
-
-export function formatSessionUsageLimitNotice(template: string): string {
-  return template.replace("{limit}", String(FETCH_LIMIT));
-}
-
-function activeSessionKeys(payload: unknown): Set<string> {
-  const keys = new Set<string>();
-  if (!isRecord(payload) || !Array.isArray(payload.sessions)) return keys;
-  for (const session of payload.sessions) {
-    if (!isRecord(session)) continue;
-    const key = asString(session.key);
-    if (key) keys.add(key);
-  }
-  return keys;
-}
-
-export function mapEntries(payload: unknown, activeKeys?: Set<string>): MapResult {
+export function mapEntries(payload: unknown): MapResult {
   if (!isRecord(payload)) return { rows: [], totalSessions: 0, totals: null };
   const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
   const rows: SessionUsageRow[] = [];
   for (const entry of sessions) {
     if (!isRecord(entry)) continue;
     const key = asString(entry.key) ?? "";
-    if (activeKeys && !activeKeys.has(key)) continue;
     const sessionId = asString(entry.sessionId) ?? key;
     if (!sessionId) continue;
     const agent = asString(entry.agentId) ?? "";
@@ -146,26 +114,9 @@ export function mapEntries(payload: unknown, activeKeys?: Set<string>): MapResul
   };
 }
 
-export async function loadSessionUsageSnapshot(
-  request: GatewayRequest,
-  now: Date = new Date(),
-): Promise<MapResult> {
-  const list = await request("sessions.list", {
-    includeGlobal: true,
-    includeUnknown: true,
-    limit: FETCH_LIMIT,
-  });
-  const visibleKeys = activeSessionKeys(list);
-  if (!visibleKeys.size) return { rows: [], totalSessions: 0, totals: null };
-
-  const usage = await request("sessions.usage", {
-    startDate: windowStartDateLocal(now),
-    endDate: todayDateStringLocal(now),
-    mode: "gateway",
-  });
-
-  // Visible-key filter is the correctness boundary: unscoped sessions.usage
-  // returns archived `.reset.*` / `.deleted.*` transcripts that sessions.list
-  // already omits; response.totals also includes them, so we re-sum locally.
-  return mapEntries(usage, visibleKeys);
+export async function loadSessionUsageSnapshot(request: GatewayRequest): Promise<MapResult> {
+  // Pull the full set (active + archived + inactive) — no row limit, no date window.
+  // Re-sum totals locally from the mapped rows to stay consistent with what we render.
+  const usage = await request("sessions.usage");
+  return mapEntries(usage);
 }
