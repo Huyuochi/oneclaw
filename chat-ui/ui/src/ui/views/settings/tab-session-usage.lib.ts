@@ -3,7 +3,7 @@
  * pulling in Lit decorators / DOM-side custom-element registrations.
  */
 
-export const MAX_ROWS = 500;
+// Bound gateway reads so token aggregation never triggers an unbounded full-session scan.
 export const FETCH_LIMIT = 500;
 
 export interface SessionUsageRow {
@@ -92,6 +92,10 @@ export function todayDateStringLocal(now: Date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
+export function formatSessionUsageLimitNotice(template: string): string {
+  return template.replace("{limit}", String(FETCH_LIMIT));
+}
+
 export function mapEntries(payload: unknown, activeKeys?: Set<string>): MapResult {
   if (!isRecord(payload)) return { rows: [], totalSessions: 0, totals: null };
   const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
@@ -100,7 +104,7 @@ export function mapEntries(payload: unknown, activeKeys?: Set<string>): MapResul
     if (!isRecord(entry)) continue;
     const key = asString(entry.key) ?? "";
     if (activeKeys && !activeKeys.has(key)) continue;
-    const sessionId = asString(entry.sessionId);
+    const sessionId = asString(entry.sessionId) ?? key;
     if (!sessionId) continue;
     const agent = asString(entry.agentId) ?? "";
     const origin = isRecord(entry.origin) ? entry.origin : null;
@@ -116,11 +120,10 @@ export function mapEntries(payload: unknown, activeKeys?: Set<string>): MapResul
     });
   }
   rows.sort((a, b) => b.updatedAt - a.updatedAt);
-  const displayedRows = rows.slice(0, MAX_ROWS);
   return {
-    rows: displayedRows,
+    rows,
     totalSessions: rows.length,
-    totals: sumDisplayedTotals(displayedRows),
+    totals: sumDisplayedTotals(rows),
   };
 }
 

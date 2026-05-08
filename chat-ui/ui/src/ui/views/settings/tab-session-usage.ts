@@ -4,8 +4,8 @@ import { t, tWithDetail } from "../../i18n.ts";
 import "../../components/message-box.ts";
 import { formatTokens } from "../usage-metrics.ts";
 import {
-  MAX_ROWS,
   beginSessionUsageLoad,
+  formatSessionUsageLimitNotice,
   loadSessionUsageSnapshot,
   type SessionUsageRow,
   type UsageTotals,
@@ -106,12 +106,13 @@ export function renderTabSessionUsage(state: AppViewState) {
   s.wasConnected = state.connected;
   if (!s.initialized && !s.loading && state.connected && state.client) init(state);
 
-  const overflow = s.totalSessions > MAX_ROWS;
-
   return html`
     <div class="oc-settings__section">
       <h2 class="oc-settings__section-title">${t("settings.sessionUsage.pageTitle")}</h2>
       <p class="oc-settings__hint">${t("settings.sessionUsage.pageDesc")}</p>
+      <p class="oc-settings__hint oc-session-usage__limit-hint">
+        ${formatSessionUsageLimitNotice(t("settings.sessionUsage.limitHint"))}
+      </p>
 
       <div class="oc-settings__card">
         ${s.loading
@@ -119,9 +120,6 @@ export function renderTabSessionUsage(state: AppViewState) {
           : s.rows.length
             ? html`
                 ${s.totals ? renderTotals(s.totals) : nothing}
-                ${overflow
-                  ? html`<div class="oc-session-usage__overflow">${t("settings.sessionUsage.overflow")}</div>`
-                  : nothing}
                 <div class="oc-session-usage__list">${s.rows.map(renderRow)}</div>
               `
             : html`<div class="oc-session-usage__empty">${t("settings.sessionUsage.empty")}</div>`}
@@ -144,6 +142,9 @@ styleSheet.replaceSync(/* css */`
     border-radius: var(--radius-md, 10px);
     background: var(--bg-input, #f5f5f5);
   }
+  .oc-session-usage__limit-hint {
+    margin-top: -4px;
+  }
   .oc-session-usage__totals-label {
     font-size: 12px;
     font-weight: 700;
@@ -159,11 +160,6 @@ styleSheet.replaceSync(/* css */`
     font-weight: 600;
     color: var(--text-strong, #18181b);
     font-variant-numeric: tabular-nums;
-  }
-  .oc-session-usage__overflow {
-    font-size: 12px;
-    color: var(--text-muted, #a1a1aa);
-    margin-bottom: 8px;
   }
   .oc-session-usage__list {
     display: flex;

@@ -1,14 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { setLocale, t } from "../../i18n.ts";
 import {
   FETCH_LIMIT,
-  MAX_ROWS,
   beginSessionUsageLoad,
+  formatSessionUsageLimitNotice,
   loadSessionUsageSnapshot,
   mapEntries,
   isRecord,
   todayDateStringLocal,
 } from "./tab-session-usage.lib.ts";
+
+test("session usage limit hint includes the active fetch limit", () => {
+  assert.equal(
+    formatSessionUsageLimitNotice("Shows up to the {limit} most recent sessions."),
+    `Shows up to the ${FETCH_LIMIT} most recent sessions.`,
+  );
+});
+
+test("session usage limit hint is localized", () => {
+  setLocale("en");
+  assert.match(t("settings.sessionUsage.limitHint"), /\{limit\}/);
+  setLocale("zh");
+  assert.match(t("settings.sessionUsage.limitHint"), /\{limit\}/);
+  setLocale("en");
+});
 
 test("isRecord rejects arrays", () => {
   assert.equal(isRecord([]), false);
@@ -26,7 +42,7 @@ test("mapEntries returns empty result for non-record payload", () => {
   assert.deepEqual(mapEntries("nope"), { rows: [], totalSessions: 0, totals: null });
 });
 
-test("mapEntries filters entries without sessionId", () => {
+test("mapEntries uses key as the row id when sessionId is missing", () => {
   const payload = {
     sessions: [
       {
@@ -37,18 +53,25 @@ test("mapEntries filters entries without sessionId", () => {
         updatedAt: 100,
         usage: { input: 10, output: 20, cacheRead: 5, cacheWrite: 1 },
       },
-      // missing sessionId
-      { key: "agent:claude:s3", agentId: "claude", updatedAt: 300, usage: {} },
+      {
+        key: "agent:claude:s3",
+        agentId: "claude",
+        updatedAt: 300,
+        usage: { input: 3, output: 4, cacheRead: 5 },
+      },
+      // missing both sessionId and key
+      { agentId: "claude", updatedAt: 400, usage: {} },
     ],
   };
   const result = mapEntries(payload);
-  assert.equal(result.rows.length, 1);
-  assert.equal(result.rows[0]!.sessionId, "s1");
-  assert.equal(result.rows[0]!.input, 10);
-  assert.equal("cacheWrite" in result.rows[0]!, false);
+  assert.equal(result.rows.length, 2);
+  assert.equal(result.rows[0]!.sessionId, "agent:claude:s3");
+  assert.equal(result.rows[1]!.sessionId, "s1");
+  assert.equal(result.rows[1]!.input, 10);
+  assert.equal("cacheWrite" in result.rows[1]!, false);
   // Totals sum only the displayed rows' input/output/cacheRead — cacheWrite is excluded.
-  assert.deepEqual(result.totals, { input: 10, output: 20, cacheRead: 5 });
-  assert.equal(result.totalSessions, 1);
+  assert.deepEqual(result.totals, { input: 13, output: 24, cacheRead: 10 });
+  assert.equal(result.totalSessions, 2);
 });
 
 test("mapEntries returns null totals when no rows survive filtering", () => {
@@ -89,7 +112,7 @@ test("beginSessionUsageLoad keeps a failed load from retrying on every render", 
   assert.equal(beginSessionUsageLoad(state, true, true), false);
 });
 
-test("loadSessionUsageSnapshot loads usage and active sessions before filtering/capping client-side", async () => {
+test("loadSessionUsageSnapshot loads usage and active sessions before filtering client-side", async () => {
   const calls: Array<{ method: string; params?: unknown }> = [];
   const sessions = [
     {
@@ -136,14 +159,14 @@ test("loadSessionUsageSnapshot loads usage and active sessions before filtering/
       limit: FETCH_LIMIT,
     },
   });
-  assert.equal(result.rows.length, MAX_ROWS);
+  assert.equal(result.rows.length, 205);
   assert.equal(result.rows[0]!.sessionId, "s204");
-  assert.equal(result.rows[199]!.sessionId, "s5");
+  assert.equal(result.rows[204]!.sessionId, "s0");
   assert.equal(
     result.rows.some((row) => row.sessionId === "archived"),
     false,
   );
-  assert.deepEqual(result.totals, { input: 200, output: 400, cacheRead: 600 });
+  assert.deepEqual(result.totals, { input: 205, output: 410, cacheRead: 615 });
 });
 
 test("todayDateStringLocal formats local Y-M-D across DST, month-end, year-end", () => {
@@ -167,7 +190,7 @@ test("mapEntries flags isMain for default agent main key", () => {
   assert.equal(other?.isMain, false);
 });
 
-test("mapEntries sorts rows by updatedAt desc and caps to 200", () => {
+test("mapEntries sorts rows by updatedAt desc without a display cap", () => {
   const sessions = Array.from({ length: 250 }, (_, i) => ({
     sessionId: `s${i}`,
     key: `agent:a:s${i}`,
@@ -176,10 +199,9 @@ test("mapEntries sorts rows by updatedAt desc and caps to 200", () => {
     usage: { input: 1, output: 2, cacheRead: 3 },
   }));
   const result = mapEntries({ sessions });
-  assert.equal(result.rows.length, 200);
+  assert.equal(result.rows.length, 250);
   assert.equal(result.totalSessions, 250);
-  // Totals reflect the 200 displayed rows × {1, 2, 3}.
-  assert.deepEqual(result.totals, { input: 200, output: 400, cacheRead: 600 });
+  assert.deepEqual(result.totals, { input: 250, output: 500, cacheRead: 750 });
   assert.equal(result.rows[0]!.updatedAt, 249);
-  assert.equal(result.rows[199]!.updatedAt, 50);
+  assert.equal(result.rows[249]!.updatedAt, 0);
 });
