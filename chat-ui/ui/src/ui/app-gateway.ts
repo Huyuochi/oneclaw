@@ -14,7 +14,7 @@ import {
 } from "./app-settings.ts";
 import { registerTickHandler, unregisterTickHandler, startTicker, stopTicker } from "./client-ticker.ts";
 import { loadCronJobs } from "./controllers/cron.ts";
-import type { PendingContextModelOverride } from "./context-meter.ts";
+import { clearSessionMeterDirtyIfUsageAdvanced } from "./context-meter.ts";
 import { handleAgentEvent, resetToolStream, type AgentEventPayload } from "./app-tool-stream.ts";
 import { debugLog, isDebugEnabled } from "./debug.ts";
 import { loadAgents } from "./controllers/agents.ts";
@@ -34,8 +34,6 @@ import { GatewayBrowserClient } from "./gateway.ts";
 import { applySessionKeyTransition } from "./session-transition.ts";
 import { resolveVisibleSessionSelection } from "./session-visibility.ts";
 import {
-  shouldClearContextOverrideAfterUsageRefresh,
-  shouldClearPendingContextModelOverride,
   shouldFinishUsageRefreshAttempt,
   shouldRefreshSessionsForChatState,
 } from "./usage-refresh.ts";
@@ -70,7 +68,8 @@ type GatewayHost = {
   sessionsIncludeGlobal: boolean;
   sessionsIncludeUnknown: boolean;
   chatRunId: string | null;
-  pendingContextModelOverride: PendingContextModelOverride | null;
+  dirtyMeterSessions: Set<string>;
+  meterTotalsBaseline: Map<string, number>;
   execApprovalQueue: ExecApprovalRequest[];
   execApprovalError: string | null;
 };
@@ -318,35 +317,21 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
       };
       // 终态到达时 gateway 可能还没持久化，本值作为“旧快照”供后续轮询判断。
       const baseline = readUsage();
-      const overrideAtStart = host.pendingContextModelOverride;
-      const terminalRunId = payload?.runId ?? null;
       void (async () => {
         const delays = [700, 1500];
         for (const [i, delay] of delays.entries()) {
           await new Promise((r) => setTimeout(r, delay));
           await loadSessions(host as unknown as OpenClawApp);
-          // loadSessions 后重新读取；baseline 缺失时不把第一条旧 row 当成“新 usage”。
           const currentUsage = readUsage();
-          const pendingModelPersisted = shouldClearContextOverrideAfterUsageRefresh(
-            readUsageRow(),
-            overrideAtStart,
-          );
           if (shouldFinishUsageRefreshAttempt(baseline, currentUsage, i === delays.length - 1)) {
-            // 只有 row 已经反映 pending 模型/窗口时，才回到 gateway 持久化窗口。
-            const current = host.pendingContextModelOverride;
-            if (
-              current &&
-              shouldClearPendingContextModelOverride(
-                current,
-                {
-                  sessionKey: refreshKey,
-                  model: current.model,
-                  runId: terminalRunId,
-                },
-                pendingModelPersisted,
-              )
-            ) {
-              host.pendingContextModelOverride = null;
+            // 仅当 totalTokens 真的前进时清掉冻结标记；同窗口模型切换也走这条路径。
+            const row = readUsageRow();
+            const nextTotal = typeof row?.totalTokens === "number" ? row.totalTokens : 0;
+            const prevTotal = host.meterTotalsBaseline.get(refreshKey) ?? 0;
+            const nextDirty = new Set(host.dirtyMeterSessions);
+            if (clearSessionMeterDirtyIfUsageAdvanced(nextDirty, refreshKey, prevTotal, nextTotal)) {
+              host.dirtyMeterSessions = nextDirty;
+              host.meterTotalsBaseline.delete(refreshKey);
             }
             return;
           }

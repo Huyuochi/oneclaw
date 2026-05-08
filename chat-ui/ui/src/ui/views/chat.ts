@@ -14,10 +14,7 @@ import { icons } from "../icons.ts";
 import { t } from "../i18n.ts";
 import { detectTextDirection } from "../text-direction.ts";
 import { renderMarkdownSidebar } from "./markdown-sidebar.ts";
-import {
-  resolveContextMeterStats,
-  type PendingContextModelOverride,
-} from "../context-meter.ts";
+import { resolveContextMeterStats } from "../context-meter.ts";
 import "../components/resizable-divider.ts";
 import { computeStopButtonVisible } from "./chat-stop-button-gate.ts";
 
@@ -63,7 +60,7 @@ export type ChatProps = {
   // 模型选择器
   configuredModels?: ConfiguredModel[];
   currentModel?: string | null;
-  pendingContextModelOverride?: PendingContextModelOverride | null;
+  dirtyMeterSessions?: ReadonlySet<string>;
   onModelChange?: (modelKey: string) => void;
   // 思考开关
   thinkingToggleLevel?: string;
@@ -115,8 +112,8 @@ function adjustTextareaHeight(el: HTMLTextAreaElement, deferred = false) {
  *            缺失时回退到 lookupContextWindow(session.model)，不跨会话信任 currentModel
  * 仅展示「当前会话」占用比例，跨会话独立；模型未知且 used>0 时整体隐藏。
  *
- * 模型切换的陷阱：只有同会话的 pending override 能临时覆盖 contextTokens；
- * 跨会话时不信任全局 currentModel，避免拿上一个会话的模型当分母。
+ * 模型切换：用户切完 model 后，该 sessionKey 会被加入 dirtyMeterSessions 集合，
+ * 直到下一轮 usage（totalTokens 单调推进）落库才清除——天然 per-session 独立。
  */
 function contextMeterText(
   key: string,
@@ -130,10 +127,10 @@ function contextMeterText(
 
 function renderContextMeter(
   session: GatewaySessionRow | null | undefined,
-  pendingOverride: PendingContextModelOverride | null | undefined,
+  dirtySessions: ReadonlySet<string> | undefined,
 ) {
   if (!session) return nothing;
-  const stats = resolveContextMeterStats(session, pendingOverride);
+  const stats = resolveContextMeterStats(session, dirtySessions);
   if (!stats) return nothing;
   const values = {
     percent: String(stats.percent),
@@ -635,7 +632,7 @@ export function renderChat(props: ChatProps) {
             }
           </div>
           <div class="chat-compose__toolbar-right">
-            ${renderContextMeter(activeSession, props.pendingContextModelOverride)}
+            ${renderContextMeter(activeSession, props.dirtyMeterSessions)}
             ${isBusy && canAbort
               ? html`<button
                   class="chat-compose__send-btn"

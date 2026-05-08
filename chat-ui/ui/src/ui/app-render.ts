@@ -1978,7 +1978,7 @@ export function renderApp(state: AppViewState) {
                   onDraftChange: (next) => (state.chatMessage = next),
                   configuredModels: state.configuredModels,
                   currentModel: state.currentModel,
-                  pendingContextModelOverride: state.pendingContextModelOverride,
+                  dirtyMeterSessions: state.dirtyMeterSessions,
                   onModelChange: (modelKey) => state.handleModelChange(modelKey),
                   thinkingToggleLevel: state.thinkingLevel,
                   thinkingToggleLevels: state.thinkingLevels,

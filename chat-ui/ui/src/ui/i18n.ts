@@ -514,7 +514,7 @@ const dict: Record<Locale, Record<string, string>> = {
     "chat.contextMeterLabel": "对话记忆",
     "chat.contextMeterAria": "对话记忆已用 {percent}%，约 {used} / {max} 个记忆单位",
     "chat.contextMeterHint":
-      "对话记忆：已用 {percent}%\nAI 会优先参考这部分对话内容；越接近满，越早的细节越可能被压缩成摘要。\n约 {used} / {max} 个记忆单位",
+      "上下文记忆：已用 {percent}%\nAI 会优先参考这部分对话内容；上下文越满，模型表现越笨，可通过新建对话避免。\n约 {used} / {max} 个记忆单位",
     "chat.exitFocus": "退出专注模式",
     "chat.messageLabel": "消息",
     "chat.image": "图片",
@@ -1065,7 +1065,7 @@ const dict: Record<Locale, Record<string, string>> = {
     "chat.contextMeterLabel": "Memory",
     "chat.contextMeterAria": "Conversation memory is {percent}% used, about {used} / {max} memory units",
     "chat.contextMeterHint":
-      "Memory: {percent}% used\nThe AI uses this space to remember the current conversation. Near full, older details may be compressed into a summary.\nAbout {used} / {max} memory units",
+      "Memory: {percent}% used\nThe AI draws on this conversation first; the fuller it gets, the duller the model becomes — start a new chat to keep it sharp.\nAbout {used} / {max} memory units",
     "chat.exitFocus": "Exit focus mode",
     "chat.messageLabel": "Message",
     "chat.image": "Image",

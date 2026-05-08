@@ -81,8 +81,7 @@ import {
 } from "./app-tool-stream.ts";
 import { resolveInjectedAssistantIdentity } from "./assistant-identity.ts";
 import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./controllers/assistant-identity.ts";
-import type { PendingContextModelOverride } from "./context-meter.ts";
-import { shouldClearOverrideAfterPatchError } from "./usage-refresh.ts";
+import { markSessionMeterDirty } from "./context-meter.ts";
 import { getLocale, t } from "./i18n.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
 import { type ChatAttachment, type ChatQueueItem, type ConfiguredModel, type CronFormState } from "./ui-types.ts";
@@ -212,7 +211,7 @@ export class OpenClawApp extends LitElement {
     chatAttachments: { state: true },
     configuredModels: { state: true },
     currentModel: { state: true },
-    pendingContextModelOverride: { state: true },
+    dirtyMeterSessions: { state: true },
     thinkingLevel: { state: true },
     thinkingLevels: { state: true },
     isBinaryThinking: { state: true },
@@ -450,7 +449,8 @@ export class OpenClawApp extends LitElement {
   chatAttachments: ChatAttachment[] = [];
   configuredModels: ConfiguredModel[] = [];
   currentModel: string | null = null;
-  pendingContextModelOverride: PendingContextModelOverride | null = null;
+  dirtyMeterSessions: Set<string> = new Set();
+  meterTotalsBaseline: Map<string, number> = new Map();
   thinkingLevel: string = "off";
   thinkingLevels: string[] = [];
   isBinaryThinking: boolean = false;
@@ -1054,18 +1054,22 @@ export class OpenClawApp extends LitElement {
     if (!this.client || !this.connected) {
       return;
     }
-    // 仅当前会话可用，避免 context meter 跨会话误用全局 currentModel。
-    const ownOverride: PendingContextModelOverride = { sessionKey: this.sessionKey, model: modelKey, runId: null };
-    this.pendingContextModelOverride = ownOverride;
+    // 切完模型先冻结 context meter；下一轮 usage 落库（totalTokens 单调推进）后由
+    // app-gateway 的 usage 刷新清除。重新赋值以触发 Lit reactive 更新。
+    const sessionKey = this.sessionKey;
+    const currentTotal = this.sessionsResult?.sessions?.find(
+      (r) => r.key === sessionKey,
+    )?.totalTokens ?? 0;
+    const nextDirty = new Set(this.dirtyMeterSessions);
+    markSessionMeterDirty(nextDirty, sessionKey);
+    this.dirtyMeterSessions = nextDirty;
+    this.meterTotalsBaseline.set(sessionKey, currentTotal);
     try {
       await this.client.request("sessions.patch", {
-        key: this.sessionKey,
+        key: sessionKey,
         model: modelKey,
       });
     } catch (err) {
-      if (shouldClearOverrideAfterPatchError(this.pendingContextModelOverride, ownOverride)) {
-        this.pendingContextModelOverride = null;
-      }
       this.lastError = String(err);
     }
     this.updateThinkingCapabilities();

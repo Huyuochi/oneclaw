@@ -28,7 +28,6 @@ function makeHost() {
     chatVisibleMessageCount: 7,
     chatQueue: [{ id: "queued" }],
     chatAvatarUrl: "https://example.com/avatar.png",
-    pendingContextModelOverride: { sessionKey: "session-a", model: "moonshot/moonshot-v1-128k" },
     basePath: "",
     hello: null,
     sessionsResult: null,
@@ -77,10 +76,6 @@ async function testApplySessionKeyTransitionResetsComposerState() {
   assert.equal(ctx.host.chatRunId, null);
   assert.deepEqual(ctx.host.chatQueue, []);
   assert.equal(ctx.host.chatAvatarUrl, null);
-  assert.deepEqual(ctx.host.pendingContextModelOverride, {
-    sessionKey: "session-a",
-    model: "moonshot/moonshot-v1-128k",
-  });
   assert.equal(ctx.host.settings.sessionKey, "session-b");
   assert.equal(ctx.host.settings.lastActiveSessionKey, "session-b");
   assert.equal(ctx.assistantLoads, 1);
