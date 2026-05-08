@@ -3,9 +3,12 @@
  * pulling in Lit decorators / DOM-side custom-element registrations.
  */
 
-// Bound gateway reads so token aggregation never triggers an unbounded full-session scan.
 export const FETCH_LIMIT = 500;
+export const WINDOW_DAYS = 90;
 
+// cacheWrite is intentionally NOT tracked here. KIMI / Moonshot APIs never
+// report it, so even with client-side estimation the column was inconsistent
+// across providers and didn't aid the user. Removed by design — not missing.
 export interface SessionUsageRow {
   sessionId: string;
   isMain: boolean;
@@ -31,31 +34,6 @@ interface MapResult {
 
 type GatewayRequest = <T = unknown>(method: string, params?: unknown) => Promise<T>;
 
-function sumDisplayedTotals(rows: SessionUsageRow[]): UsageTotals | null {
-  if (rows.length === 0) return null;
-  let input = 0;
-  let output = 0;
-  let cacheRead = 0;
-  for (const row of rows) {
-    input += row.input ?? 0;
-    output += row.output ?? 0;
-    cacheRead += row.cacheRead ?? 0;
-  }
-  return { input, output, cacheRead };
-}
-
-function asString(v: unknown): string | null {
-  return typeof v === "string" && v.length > 0 ? v : null;
-}
-
-function asNumber(v: unknown): number {
-  return typeof v === "number" && Number.isFinite(v) ? v : 0;
-}
-
-export function isRecord(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === "object" && !Array.isArray(v);
-}
-
 export interface SessionUsageLoadFlags {
   initialized: boolean;
   loading: boolean;
@@ -73,6 +51,18 @@ export function beginSessionUsageLoad(
   return true;
 }
 
+export function isRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+function asString(v: unknown): string | null {
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+function asNumber(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
 function pickToken(usage: unknown, key: "input" | "output" | "cacheRead"): number | null {
   if (!isRecord(usage)) return null;
   const value = usage[key];
@@ -80,9 +70,21 @@ function pickToken(usage: unknown, key: "input" | "output" | "cacheRead"): numbe
 }
 
 function isMainSessionKey(sessionKey: string, agent: string): boolean {
-  // A custom mainKey won't get the badge — covers the overwhelming majority of users.
   const lower = sessionKey.toLowerCase();
   return lower === `agent:${agent.toLowerCase()}:main` || lower === "main";
+}
+
+function sumDisplayedTotals(rows: SessionUsageRow[]): UsageTotals | null {
+  if (rows.length === 0) return null;
+  let input = 0;
+  let output = 0;
+  let cacheRead = 0;
+  for (const row of rows) {
+    input += row.input ?? 0;
+    output += row.output ?? 0;
+    cacheRead += row.cacheRead ?? 0;
+  }
+  return { input, output, cacheRead };
 }
 
 export function todayDateStringLocal(now: Date = new Date()): string {
@@ -92,8 +94,25 @@ export function todayDateStringLocal(now: Date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
+export function windowStartDateLocal(now: Date, days = WINDOW_DAYS): string {
+  const d = new Date(now);
+  d.setDate(d.getDate() - (days - 1));
+  return todayDateStringLocal(d);
+}
+
 export function formatSessionUsageLimitNotice(template: string): string {
   return template.replace("{limit}", String(FETCH_LIMIT));
+}
+
+function activeSessionKeys(payload: unknown): Set<string> {
+  const keys = new Set<string>();
+  if (!isRecord(payload) || !Array.isArray(payload.sessions)) return keys;
+  for (const session of payload.sessions) {
+    if (!isRecord(session)) continue;
+    const key = asString(session.key);
+    if (key) keys.add(key);
+  }
+  return keys;
 }
 
 export function mapEntries(payload: unknown, activeKeys?: Set<string>): MapResult {
@@ -127,33 +146,26 @@ export function mapEntries(payload: unknown, activeKeys?: Set<string>): MapResul
   };
 }
 
-function activeSessionKeys(payload: unknown): Set<string> {
-  const keys = new Set<string>();
-  if (!isRecord(payload) || !Array.isArray(payload.sessions)) return keys;
-  for (const session of payload.sessions) {
-    if (!isRecord(session)) continue;
-    const key = asString(session.key);
-    if (key) keys.add(key);
-  }
-  return keys;
-}
-
 export async function loadSessionUsageSnapshot(
   request: GatewayRequest,
   now: Date = new Date(),
 ): Promise<MapResult> {
-  const [payload, activeSessions] = await Promise.all([
-    request("sessions.usage", {
-      startDate: "1970-01-01",
-      endDate: todayDateStringLocal(now),
-      mode: "gateway",
-      limit: FETCH_LIMIT,
-    }),
-    request("sessions.list", {
-      includeGlobal: true,
-      includeUnknown: true,
-      limit: FETCH_LIMIT,
-    }),
-  ]);
-  return mapEntries(payload, activeSessionKeys(activeSessions));
+  const list = await request("sessions.list", {
+    includeGlobal: true,
+    includeUnknown: true,
+    limit: FETCH_LIMIT,
+  });
+  const visibleKeys = activeSessionKeys(list);
+  if (!visibleKeys.size) return { rows: [], totalSessions: 0, totals: null };
+
+  const usage = await request("sessions.usage", {
+    startDate: windowStartDateLocal(now),
+    endDate: todayDateStringLocal(now),
+    mode: "gateway",
+  });
+
+  // Visible-key filter is the correctness boundary: unscoped sessions.usage
+  // returns archived `.reset.*` / `.deleted.*` transcripts that sessions.list
+  // already omits; response.totals also includes them, so we re-sum locally.
+  return mapEntries(usage, visibleKeys);
 }

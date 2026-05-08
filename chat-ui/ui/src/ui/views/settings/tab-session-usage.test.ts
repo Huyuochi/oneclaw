@@ -9,6 +9,7 @@ import {
   mapEntries,
   isRecord,
   todayDateStringLocal,
+  windowStartDateLocal,
 } from "./tab-session-usage.lib.ts";
 
 test("session usage limit hint includes the active fetch limit", () => {
@@ -51,7 +52,7 @@ test("mapEntries uses key as the row id when sessionId is missing", () => {
         agentId: "claude",
         label: "Hello",
         updatedAt: 100,
-        usage: { input: 10, output: 20, cacheRead: 5, cacheWrite: 1 },
+        usage: { input: 10, output: 20, cacheRead: 5 },
       },
       {
         key: "agent:claude:s3",
@@ -68,8 +69,6 @@ test("mapEntries uses key as the row id when sessionId is missing", () => {
   assert.equal(result.rows[0]!.sessionId, "agent:claude:s3");
   assert.equal(result.rows[1]!.sessionId, "s1");
   assert.equal(result.rows[1]!.input, 10);
-  assert.equal("cacheWrite" in result.rows[1]!, false);
-  // Totals sum only the displayed rows' input/output/cacheRead — cacheWrite is excluded.
   assert.deepEqual(result.totals, { input: 13, output: 24, cacheRead: 10 });
   assert.equal(result.totalSessions, 2);
 });
@@ -112,61 +111,120 @@ test("beginSessionUsageLoad keeps a failed load from retrying on every render", 
   assert.equal(beginSessionUsageLoad(state, true, true), false);
 });
 
-test("loadSessionUsageSnapshot loads usage and active sessions before filtering client-side", async () => {
-  const calls: Array<{ method: string; params?: unknown }> = [];
-  const sessions = [
-    {
-      key: "agent:a:archived",
-      sessionId: "archived",
-      updatedAt: 10_000,
-      usage: { input: 1000, output: 1000, cacheRead: 1000 },
-    },
-    ...Array.from({ length: 205 }, (_, i) => ({
-      key: `agent:a:s${i}`,
-      sessionId: `s${i}`,
-      updatedAt: 100 + i,
-      usage: { input: 1, output: 2, cacheRead: 3 },
-    })),
-  ];
+test("windowStartDateLocal returns the inclusive start of the requested day window", () => {
+  // US DST spring-forward: Mar 8 plus the previous 89 days yields 90 inclusive days.
+  assert.equal(windowStartDateLocal(new Date(2026, 2, 8, 3, 30)), "2025-12-09");
+  // month-end: Jan 31 plus the previous 89 days
+  assert.equal(windowStartDateLocal(new Date(2026, 0, 31, 23, 59)), "2025-11-03");
+  // year-end: Dec 31 plus the previous 89 days
+  assert.equal(windowStartDateLocal(new Date(2026, 11, 31, 23, 59)), "2026-10-03");
+  // year-start: Jan 1 plus the previous 89 days
+  assert.equal(windowStartDateLocal(new Date(2026, 0, 1, 0, 0)), "2025-10-04");
+  // explicit days override
+  assert.equal(windowStartDateLocal(new Date(2026, 5, 15, 12, 0), 30), "2026-05-17");
+});
 
-  const now = new Date("2025-12-02T00:00:00Z");
+test("loadSessionUsageSnapshot keeps sessions.usage date-scoped without a row limit", async () => {
+  const calls: Array<{ method: string; params?: unknown }> = [];
+  const visibleSessions = {
+    sessions: [
+      { key: "agent:a:s0" },
+      { key: "agent:a:s2" },
+      { key: "agent:a:s1" },
+    ],
+  };
+  const usagePayload = {
+    sessions: [
+      { key: "agent:a:s0", sessionId: "s0", agentId: "a", updatedAt: 100, usage: { input: 1, output: 2, cacheRead: 3 } },
+      { key: "agent:a:s1", sessionId: "s1", agentId: "a", updatedAt: 200, usage: { input: 10, output: 20, cacheRead: 30 } },
+      { key: "agent:a:s2", sessionId: "s2", agentId: "a", updatedAt: 300, usage: { input: 100, output: 200, cacheRead: 300 } },
+    ],
+  };
+
+  const now = new Date(2026, 2, 15, 12, 0);
   const result = await loadSessionUsageSnapshot(async <T>(method: string, params?: unknown): Promise<T> => {
     calls.push({ method, params });
-    if (method === "sessions.usage") return { sessions } as T;
-    if (method === "sessions.list") {
-      return {
-        sessions: sessions.slice(1).map((session) => ({ key: session.key })),
-      } as T;
-    }
+    if (method === "sessions.list") return visibleSessions as T;
+    if (method === "sessions.usage") return usagePayload as T;
     throw new Error(`unexpected method ${method}`);
   }, now);
 
   assert.equal(calls.length, 2);
   assert.deepEqual(calls[0], {
-    method: "sessions.usage",
-    params: {
-      startDate: "1970-01-01",
-      endDate: todayDateStringLocal(now),
-      mode: "gateway",
-      limit: FETCH_LIMIT,
-    },
+    method: "sessions.list",
+    params: { includeGlobal: true, includeUnknown: true, limit: FETCH_LIMIT },
   });
   assert.deepEqual(calls[1], {
-    method: "sessions.list",
+    method: "sessions.usage",
     params: {
-      includeGlobal: true,
-      includeUnknown: true,
-      limit: FETCH_LIMIT,
+      startDate: windowStartDateLocal(now),
+      endDate: todayDateStringLocal(now),
+      mode: "gateway",
     },
   });
-  assert.equal(result.rows.length, 205);
-  assert.equal(result.rows[0]!.sessionId, "s204");
-  assert.equal(result.rows[204]!.sessionId, "s0");
-  assert.equal(
-    result.rows.some((row) => row.sessionId === "archived"),
-    false,
+  assert.equal(result.rows.length, 3);
+  assert.equal(result.rows[0]!.sessionId, "s2");
+  assert.equal(result.rows[1]!.sessionId, "s1");
+  assert.equal(result.rows[2]!.sessionId, "s0");
+  assert.deepEqual(result.totals, { input: 111, output: 222, cacheRead: 333 });
+});
+
+test("loadSessionUsageSnapshot filters archived synthetic-key entries that leak from sessions.usage", async () => {
+  const now = new Date(2026, 2, 15, 12, 0);
+  const result = await loadSessionUsageSnapshot(async <T>(method: string): Promise<T> => {
+    if (method === "sessions.list") {
+      return {
+        sessions: [{ key: "agent:a:s1" }],
+      } as T;
+    }
+    if (method === "sessions.usage") {
+      return {
+        sessions: [
+          { key: "agent:a:s1", sessionId: "s1", agentId: "a", updatedAt: 200, usage: { input: 10, output: 20, cacheRead: 30 } },
+          // archived: present in sessions.usage but not in sessions.list
+          { key: "agent:a:archived", sessionId: "archived", agentId: "a", updatedAt: 100, usage: { input: 99, output: 99, cacheRead: 99 } },
+        ],
+        totals: { input: 109, output: 119, cacheRead: 129 },
+      } as T;
+    }
+    throw new Error(`unexpected method ${method}`);
+  }, now);
+
+  assert.deepEqual(result.rows.map((row) => row.sessionId), ["s1"]);
+  // totals must come from the filtered rows, not the gateway response.totals (which includes archives)
+  assert.deepEqual(result.totals, { input: 10, output: 20, cacheRead: 30 });
+});
+
+test("loadSessionUsageSnapshot returns empty result when sessions.list yields no visible keys", async () => {
+  const now = new Date(2026, 2, 15, 12, 0);
+  let usageCalled = false;
+  const result = await loadSessionUsageSnapshot(async <T>(method: string): Promise<T> => {
+    if (method === "sessions.list") return { sessions: [] } as T;
+    if (method === "sessions.usage") {
+      usageCalled = true;
+      return { sessions: [] } as T;
+    }
+    throw new Error(`unexpected method ${method}`);
+  }, now);
+
+  assert.equal(usageCalled, false);
+  assert.deepEqual(result, { rows: [], totalSessions: 0, totals: null });
+});
+
+test("loadSessionUsageSnapshot rethrows sessions.usage failures", async () => {
+  const now = new Date(2026, 2, 15, 12, 0);
+  await assert.rejects(
+    loadSessionUsageSnapshot(async <T>(method: string): Promise<T> => {
+      if (method === "sessions.list") {
+        return { sessions: [{ key: "agent:a:s1" }] } as T;
+      }
+      if (method === "sessions.usage") {
+        throw new Error("gateway timeout");
+      }
+      throw new Error(`unexpected method ${method}`);
+    }, now),
+    /gateway timeout/,
   );
-  assert.deepEqual(result.totals, { input: 205, output: 410, cacheRead: 615 });
 });
 
 test("todayDateStringLocal formats local Y-M-D across DST, month-end, year-end", () => {
@@ -189,6 +247,9 @@ test("mapEntries flags isMain for default agent main key", () => {
   assert.ok(main?.isMain);
   assert.equal(other?.isMain, false);
 });
+
+// The KIMI/Moonshot cacheWrite estimation test was removed alongside the
+// estimation logic — cacheWrite is no longer surfaced (see tab-session-usage.lib.ts).
 
 test("mapEntries sorts rows by updatedAt desc without a display cap", () => {
   const sessions = Array.from({ length: 250 }, (_, i) => ({

@@ -308,7 +308,8 @@ const dict: Record<Locale, Record<string, string>> = {
     // Settings: Session Usage
     "settings.sessionUsage.pageTitle": "会话用量",
     "settings.sessionUsage.pageDesc": "按会话累计的 Token 用量（按最近更新倒序）",
-    "settings.sessionUsage.limitHint": "最多显示最近 {limit} 条会话，并基于这些会话统计 Token 用量。",
+    "settings.sessionUsage.limitHint": "展示最近 90 天的最多 {limit} 条会话，Token 用量基于这些会话统计。",
+    "settings.sessionUsage.loadFailedHint": "加载失败，请重启 Gateway 后重新打开本页面。",
     "settings.sessionUsage.empty": "暂无可统计的会话",
     "settings.sessionUsage.tokenIn": "输入",
     "settings.sessionUsage.tokenOut": "输出",
@@ -872,7 +873,8 @@ const dict: Record<Locale, Record<string, string>> = {
     // Settings: Session Usage
     "settings.sessionUsage.pageTitle": "Session Usage",
     "settings.sessionUsage.pageDesc": "Cumulative token usage per session (sorted by most recent)",
-    "settings.sessionUsage.limitHint": "Shows up to the {limit} most recent sessions and totals token usage for those sessions.",
+    "settings.sessionUsage.limitHint": "Showing sessions from the last 90 days (up to {limit}); token totals are based on these sessions.",
+    "settings.sessionUsage.loadFailedHint": "Failed to load. Please restart the gateway and reopen this page.",
     "settings.sessionUsage.empty": "No sessions to report",
     "settings.sessionUsage.tokenIn": "in",
     "settings.sessionUsage.tokenOut": "out",

@@ -1,6 +1,6 @@
 import { html, nothing } from "lit";
 import type { AppViewState } from "../../app-view-state.ts";
-import { t, tWithDetail } from "../../i18n.ts";
+import { t } from "../../i18n.ts";
 import "../../components/message-box.ts";
 import { formatTokens } from "../usage-metrics.ts";
 import {
@@ -32,11 +32,11 @@ async function init(state: AppViewState) {
     s.totals = mapped.totals;
     s.totalSessions = mapped.totalSessions;
     s.error = null;
-  } catch (e: any) {
+  } catch {
     s.rows = [];
     s.totals = null;
     s.totalSessions = 0;
-    s.error = tWithDetail("settings.error.loadFailed", e?.message);
+    s.error = t("settings.sessionUsage.loadFailedHint");
   } finally {
     s.loading = false;
     state.requestUpdate();
@@ -61,6 +61,7 @@ function formatToken(n: number | null): string {
   return n == null || !Number.isFinite(n) ? "—" : formatTokens(n);
 }
 
+// cacheWrite is intentionally omitted from totals/rows — see tab-session-usage.lib.ts.
 function renderTotals(totals: UsageTotals) {
   return html`
     <div class="oc-session-usage__totals">
