@@ -46,7 +46,6 @@ export function applySessionKeyTransition(
   host.chatRunId = null;
   host.chatQueue = [];
   host.chatAvatarUrl = null;
-  host.pendingContextModelOverride = null;
   host.resetToolStream();
   host.resetChatScroll();
   host.applySettings({

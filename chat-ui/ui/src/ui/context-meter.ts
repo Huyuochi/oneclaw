@@ -7,6 +7,17 @@ export type PendingContextModelOverride = {
   runId?: string | null;
 };
 
+export function attachRunIdToPendingOverride(
+  current: PendingContextModelOverride,
+  sessionKey: string,
+  runId: string,
+): PendingContextModelOverride {
+  if (current.sessionKey === sessionKey) {
+    current.runId = runId;
+  }
+  return current;
+}
+
 export type ContextMeterStats = {
   used: number;
   max: number;

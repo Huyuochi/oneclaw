@@ -1,6 +1,9 @@
 import type { GatewayBrowserClient } from "../gateway.ts";
 import type { ChatAttachment } from "../ui-types.ts";
-import type { PendingContextModelOverride } from "../context-meter.ts";
+import {
+  attachRunIdToPendingOverride,
+  type PendingContextModelOverride,
+} from "../context-meter.ts";
 import { extractText } from "../chat/message-extract.ts";
 import { debugLog } from "../debug.ts";
 import { generateUUID } from "../uuid.ts";
@@ -230,7 +233,7 @@ export async function sendChatMessage(
   const runId = generateUUID();
   state.chatRunId = runId;
   if (state.pendingContextModelOverride?.sessionKey === state.sessionKey) {
-    state.pendingContextModelOverride = { ...state.pendingContextModelOverride, runId };
+    attachRunIdToPendingOverride(state.pendingContextModelOverride, state.sessionKey, runId);
   }
   state.chatStream = "";
   state.chatStreamStartedAt = now;

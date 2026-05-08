@@ -82,6 +82,7 @@ import {
 import { resolveInjectedAssistantIdentity } from "./assistant-identity.ts";
 import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./controllers/assistant-identity.ts";
 import type { PendingContextModelOverride } from "./context-meter.ts";
+import { shouldClearOverrideAfterPatchError } from "./usage-refresh.ts";
 import { getLocale, t } from "./i18n.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
 import { type ChatAttachment, type ChatQueueItem, type ConfiguredModel, type CronFormState } from "./ui-types.ts";
@@ -1054,14 +1055,17 @@ export class OpenClawApp extends LitElement {
       return;
     }
     // 仅当前会话可用，避免 context meter 跨会话误用全局 currentModel。
-    this.pendingContextModelOverride = { sessionKey: this.sessionKey, model: modelKey, runId: null };
+    const ownOverride: PendingContextModelOverride = { sessionKey: this.sessionKey, model: modelKey, runId: null };
+    this.pendingContextModelOverride = ownOverride;
     try {
       await this.client.request("sessions.patch", {
         key: this.sessionKey,
         model: modelKey,
       });
     } catch (err) {
-      this.pendingContextModelOverride = null;
+      if (shouldClearOverrideAfterPatchError(this.pendingContextModelOverride, ownOverride)) {
+        this.pendingContextModelOverride = null;
+      }
       this.lastError = String(err);
     }
     this.updateThinkingCapabilities();

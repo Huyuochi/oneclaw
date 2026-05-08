@@ -310,7 +310,7 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
       const readUsageRow = () =>
         (host as unknown as OpenClawApp).sessionsResult?.sessions?.find(
           (r) => r.key === refreshKey,
-        );
+        ) ?? null;
       // 同时比较 totalTokens 和 contextTokens：前者代表新 usage，后者代表本轮实际模型窗口。
       const readUsage = () => {
         const row = readUsageRow();
@@ -327,14 +327,12 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
           await loadSessions(host as unknown as OpenClawApp);
           // loadSessions 后重新读取；baseline 缺失时不把第一条旧 row 当成“新 usage”。
           const currentUsage = readUsage();
-          const usageRefreshed = shouldClearContextOverrideAfterUsageRefresh(
-            baseline,
-            currentUsage,
+          const pendingModelPersisted = shouldClearContextOverrideAfterUsageRefresh(
             readUsageRow(),
             overrideAtStart,
           );
           if (shouldFinishUsageRefreshAttempt(baseline, currentUsage, i === delays.length - 1)) {
-            // 只有当前终态所属 run 已经刷新到 usage 时，才回到 gateway 持久化窗口。
+            // 只有 row 已经反映 pending 模型/窗口时，才回到 gateway 持久化窗口。
             const current = host.pendingContextModelOverride;
             if (
               current &&
@@ -345,7 +343,7 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
                   model: current.model,
                   runId: terminalRunId,
                 },
-                usageRefreshed,
+                pendingModelPersisted,
               )
             ) {
               host.pendingContextModelOverride = null;

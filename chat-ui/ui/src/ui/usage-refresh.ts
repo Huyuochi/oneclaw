@@ -29,7 +29,7 @@ export function shouldFinishUsageRefreshAttempt(
   if (current === null || baseline === null) {
     return false;
   }
-  return current !== baseline;
+  return didUsageSnapshotChange(baseline, current);
 }
 
 function didUsageSnapshotChange(baseline: UsageSnapshot, current: UsageSnapshot): boolean {
@@ -62,12 +62,19 @@ function isPendingModelPersisted(
 }
 
 export function shouldClearContextOverrideAfterUsageRefresh(
-  baseline: UsageSnapshot,
-  current: UsageSnapshot,
   row: UsageRowForRefresh,
   pending: PendingContextModelOverride | null | undefined,
 ): boolean {
-  return didUsageSnapshotChange(baseline, current) || isPendingModelPersisted(row, pending);
+  return isPendingModelPersisted(row, pending);
+}
+
+// 模型切换 patch 失败时调用：仅当当前 override 仍是本次切换发起的那个对象时才清掉，
+// 避免连切 A→B 时 A 的失败 catch 把 B 刚 set 的 override 也清空。
+export function shouldClearOverrideAfterPatchError(
+  current: PendingContextModelOverride | null | undefined,
+  attempted: PendingContextModelOverride,
+): boolean {
+  return current === attempted;
 }
 
 export function shouldClearPendingContextModelOverride(
