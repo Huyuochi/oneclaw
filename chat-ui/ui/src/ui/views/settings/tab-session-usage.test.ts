@@ -5,6 +5,7 @@ import {
   loadSessionUsageSnapshot,
   mapEntries,
   isRecord,
+  resolveSessionUsageDisplayLabel,
 } from "./tab-session-usage.lib.ts";
 
 test("isRecord rejects arrays", () => {
@@ -135,6 +136,26 @@ test("mapEntries flags isMain for default agent main key", () => {
   const other = rows.find((r) => r.sessionId === "x");
   assert.ok(main?.isMain);
   assert.equal(other?.isMain, false);
+});
+
+test("resolveSessionUsageDisplayLabel always displays the canonical main session label", () => {
+  assert.equal(resolveSessionUsageDisplayLabel({
+    sessionId: "e977ce58-103b-4d72-bd94-c3a6e886d813",
+    key: "agent:claude:main",
+    isMain: true,
+    customLabel: null,
+    originLabel: "heartbeat",
+  }), "agent:main:main");
+});
+
+test("resolveSessionUsageDisplayLabel falls back to sessionId for unlabeled non-main rows", () => {
+  assert.equal(resolveSessionUsageDisplayLabel({
+    sessionId: "e977ce58-103b-4d72-bd94-c3a6e886d813",
+    key: "agent:main:e977ce58-103b-4d72-bd94-c3a6e886d813",
+    isMain: false,
+    customLabel: null,
+    originLabel: null,
+  }), "e977ce58-103b-4d72-bd94-c3a6e886d813");
 });
 
 test("mapEntries sorts rows by updatedAt desc without a display cap", () => {

@@ -8,6 +8,7 @@
 // across providers and didn't aid the user. Removed by design — not missing.
 export interface SessionUsageRow {
   sessionId: string;
+  key: string;
   isMain: boolean;
   customLabel: string | null;
   originLabel: string | null;
@@ -84,6 +85,18 @@ function sumDisplayedTotals(rows: SessionUsageRow[]): UsageTotals | null {
   return { input, output, cacheRead };
 }
 
+const MAIN_SESSION_DISPLAY_LABEL = "agent:main:main";
+
+export function resolveSessionUsageDisplayLabel(
+  row: Pick<SessionUsageRow, "customLabel" | "originLabel" | "key" | "sessionId" | "isMain">,
+): string {
+  const explicitLabel = row.customLabel || row.originLabel;
+  if (row.isMain) {
+    return MAIN_SESSION_DISPLAY_LABEL;
+  }
+  return explicitLabel || row.sessionId;
+}
+
 export function mapEntries(payload: unknown): MapResult {
   if (!isRecord(payload)) return { rows: [], totalSessions: 0, totals: null };
   const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
@@ -97,6 +110,7 @@ export function mapEntries(payload: unknown): MapResult {
     const origin = isRecord(entry.origin) ? entry.origin : null;
     rows.push({
       sessionId,
+      key,
       isMain: isMainSessionKey(key, agent),
       customLabel: asString(entry.label),
       originLabel: origin ? asString(origin.label) : null,
@@ -115,7 +129,6 @@ export function mapEntries(payload: unknown): MapResult {
 }
 
 export async function loadSessionUsageSnapshot(request: GatewayRequest): Promise<MapResult> {
-  // Pull the full set (active + archived + inactive) — no row limit, no date window.
   // Re-sum totals locally from the mapped rows to stay consistent with what we render.
   const usage = await request("sessions.usage");
   return mapEntries(usage);

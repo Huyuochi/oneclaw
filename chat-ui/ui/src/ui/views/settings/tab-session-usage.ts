@@ -6,6 +6,7 @@ import { formatTokens } from "../usage-metrics.ts";
 import {
   beginSessionUsageLoad,
   loadSessionUsageSnapshot,
+  resolveSessionUsageDisplayLabel,
   type SessionUsageRow,
   type UsageTotals,
 } from "./tab-session-usage.lib.ts";
@@ -77,18 +78,13 @@ function renderTotals(totals: UsageTotals) {
 }
 
 function renderRow(row: SessionUsageRow) {
-  const label = row.customLabel || row.originLabel;
+  const displayLabel = resolveSessionUsageDisplayLabel(row);
   return html`
     <div class="oc-session-usage__row">
-      <div class="oc-session-usage__row-head">
-        ${row.isMain ? html`<span class="oc-session-usage__badge">${t("settings.sessionUsage.mainBadge")}</span>` : nothing}
-        ${label
-          ? html`<span class="oc-session-usage__label" title=${label}>${label}</span>`
-          : row.isMain
-            ? nothing
-            : html`<span class="oc-session-usage__label oc-session-usage__label--muted">${t("settings.sessionUsage.unlabeled")}</span>`}
-        <span class="oc-session-usage__time">${formatDateTime(row.updatedAt)}</span>
-      </div>
+      <span
+        class="oc-session-usage__label"
+        title=${displayLabel}
+      >${displayLabel}</span>
       <div class="oc-session-usage__row-tokens">
         <span><span class="oc-session-usage__tag">${t("settings.sessionUsage.tokenIn")}</span> ${formatToken(row.input)}</span>
         <span class="oc-session-usage__sep">·</span>
@@ -96,6 +92,7 @@ function renderRow(row: SessionUsageRow) {
         <span class="oc-session-usage__sep">·</span>
         <span><span class="oc-session-usage__tag">${t("settings.sessionUsage.tokenCacheRead")}</span> ${formatToken(row.cacheRead)}</span>
       </div>
+      <span class="oc-session-usage__time">${formatDateTime(row.updatedAt)}</span>
     </div>
   `;
 }
@@ -162,34 +159,15 @@ styleSheet.replaceSync(/* css */`
   }
   .oc-session-usage__row {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 8px 16px;
+    align-items: baseline;
+    gap: 16px;
     padding: 8px 0;
     border-bottom: 1px solid var(--border, #e4e4e7);
     background: transparent;
   }
   .oc-session-usage__row:last-child { border-bottom: none; }
-  .oc-session-usage__row-head {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    flex: 1 1 auto;
-  }
-  .oc-session-usage__badge {
-    font-size: 11.5px;
-    font-weight: 600;
-    color: var(--accent-fg, #ffffff);
-    background: var(--accent, #c0392b);
-    padding: 2px 8px;
-    border-radius: var(--radius-sm, 6px);
-    flex-shrink: 0;
-    letter-spacing: 0.02em;
-  }
   .oc-session-usage__label {
-    flex: 1;
+    flex: 1 1 0;
     min-width: 0;
     font-size: 13px;
     font-weight: 500;
@@ -198,26 +176,20 @@ styleSheet.replaceSync(/* css */`
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .oc-session-usage__label--muted {
-    color: var(--text-muted, #a1a1aa);
-    font-weight: 400;
-    font-style: italic;
-  }
-  .oc-session-usage__time {
-    margin-left: auto;
-    font-size: 11.5px;
-    color: var(--text-muted, #a1a1aa);
-    flex-shrink: 0;
-  }
   .oc-session-usage__row-tokens {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
+    align-items: baseline;
     gap: 6px;
     flex-shrink: 0;
     font-size: 12.5px;
     color: var(--text-secondary, #71717a);
     font-variant-numeric: tabular-nums;
+  }
+  .oc-session-usage__time {
+    flex-shrink: 0;
+    font-size: 11.5px;
+    color: var(--text-muted, #a1a1aa);
   }
   .oc-session-usage__tag {
     color: var(--text-muted, #a1a1aa);
@@ -232,11 +204,11 @@ styleSheet.replaceSync(/* css */`
     padding: 4px 0;
   }
   @media (max-width: 640px) {
-    .oc-session-usage__row-head {
+    .oc-session-usage__row {
       flex-wrap: wrap;
     }
-    .oc-session-usage__badge {
-      width: fit-content;
+    .oc-session-usage__time {
+      margin-left: auto;
     }
   }
 `);
