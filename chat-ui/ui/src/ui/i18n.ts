@@ -213,7 +213,6 @@ const dict: Record<Locale, Record<string, string>> = {
     "settings.error.verifyFailed": "验证失败",
     "settings.error.loginFailed": "登录失败",
     "settings.error.addGroupFailed": "添加群 ID 失败",
-    "settings.error.loadFailed": "加载失败",
 
     // Settings nav tabs
     "settings.nav.channels": "远程控制",
@@ -313,7 +312,6 @@ const dict: Record<Locale, Record<string, string>> = {
     "settings.sessionUsage.tokenIn": "输入",
     "settings.sessionUsage.tokenOut": "输出",
     "settings.sessionUsage.tokenCacheRead": "缓存读",
-    "settings.sessionUsage.unlabeled": "（无自定义标签）",
     "settings.sessionUsage.mainBadge": "主会话",
     "settings.sessionUsage.totals.label": "总Token用量",
     "settings.sessionUsage.details.title": "明细",
@@ -778,7 +776,6 @@ const dict: Record<Locale, Record<string, string>> = {
     "settings.error.verifyFailed": "Verification failed",
     "settings.error.loginFailed": "Login failed",
     "settings.error.addGroupFailed": "Failed to add group ID",
-    "settings.error.loadFailed": "Load failed",
 
     // Settings nav tabs
     "settings.nav.channels": "Remote Control",
@@ -878,7 +875,6 @@ const dict: Record<Locale, Record<string, string>> = {
     "settings.sessionUsage.tokenIn": "in",
     "settings.sessionUsage.tokenOut": "out",
     "settings.sessionUsage.tokenCacheRead": "cacheR",
-    "settings.sessionUsage.unlabeled": "(no custom label)",
     "settings.sessionUsage.mainBadge": "Main",
     "settings.sessionUsage.totals.label": "Total Token Usage",
     "settings.sessionUsage.details.title": "Details",

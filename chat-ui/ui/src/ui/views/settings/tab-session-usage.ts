@@ -117,7 +117,7 @@ export function renderTabSessionUsage(state: AppViewState) {
       ${s.totals && s.rows.length ? renderTotals(s.totals) : nothing}
 
       <div class="oc-settings__card">
-        <div class="oc-settings__card-title">${t("settings.sessionUsage.details.title")}</div>
+        <div class="oc-settings__card-title oc-session-usage__details-title">${t("settings.sessionUsage.details.title")}</div>
         ${renderDetailsBody(s.rows, s.loading)}
       </div>
 
@@ -137,10 +137,9 @@ styleSheet.replaceSync(/* css */`
     background: transparent;
   }
   .oc-session-usage__totals-label {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--text-strong, #18181b);
-    letter-spacing: 0.02em;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-secondary, #888);
   }
   .oc-session-usage__totals-tokens {
     display: flex;
@@ -148,9 +147,14 @@ styleSheet.replaceSync(/* css */`
     align-items: center;
     gap: 6px;
     font-size: 13px;
-    font-weight: 600;
-    color: var(--text-strong, #18181b);
+    font-weight: 500;
+    color: var(--text-secondary, #a1a1aa);
     font-variant-numeric: tabular-nums;
+  }
+  .oc-settings__card-title.oc-session-usage__details-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary, #a1a1aa);
   }
   .oc-session-usage__list {
     display: flex;
@@ -170,8 +174,8 @@ styleSheet.replaceSync(/* css */`
     flex: 1 1 0;
     min-width: 0;
     font-size: 13px;
-    font-weight: 500;
-    color: var(--text-strong, #18181b);
+    font-weight: 400;
+    color: var(--text-secondary, #888);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -182,25 +186,31 @@ styleSheet.replaceSync(/* css */`
     align-items: baseline;
     gap: 6px;
     flex-shrink: 0;
-    font-size: 12.5px;
-    color: var(--text-secondary, #71717a);
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-secondary, #888);
     font-variant-numeric: tabular-nums;
   }
   .oc-session-usage__time {
     flex-shrink: 0;
-    font-size: 11.5px;
-    color: var(--text-muted, #a1a1aa);
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-secondary, #888);
   }
   .oc-session-usage__tag {
-    color: var(--text-muted, #a1a1aa);
+    color: var(--text-secondary, #888);
     margin-right: 2px;
   }
+  .oc-session-usage__totals-tokens .oc-session-usage__tag {
+    color: var(--text-secondary, #a1a1aa);
+  }
   .oc-session-usage__sep {
-    color: var(--text-muted, #d4d4d8);
+    color: var(--text-secondary, #888);
   }
   .oc-session-usage__empty {
-    font-size: 12.5px;
-    color: var(--text-muted, #a1a1aa);
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-secondary, #888);
     padding: 4px 0;
   }
   @media (max-width: 640px) {
