@@ -7,6 +7,8 @@ import {
   beginSessionUsageLoad,
   loadSessionUsageSnapshot,
   resolveSessionUsageDisplayLabel,
+  SESSION_USAGE_DETAIL_LIST_MAX_HEIGHT_PX,
+  SESSION_USAGE_DETAIL_ROW_HEIGHT_PX,
   type SessionUsageRow,
   type UsageTotals,
 } from "./tab-session-usage.lib.ts";
@@ -160,14 +162,21 @@ styleSheet.replaceSync(/* css */`
     display: flex;
     flex-direction: column;
     gap: 0;
+    max-height: ${SESSION_USAGE_DETAIL_LIST_MAX_HEIGHT_PX}px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-right: 2px;
   }
   .oc-session-usage__row {
     display: flex;
     align-items: baseline;
     gap: 16px;
+    min-height: ${SESSION_USAGE_DETAIL_ROW_HEIGHT_PX}px;
     padding: 8px 0;
     border-bottom: 1px solid var(--border, #e4e4e7);
     background: transparent;
+    box-sizing: border-box;
   }
   .oc-session-usage__row:last-child { border-bottom: none; }
   .oc-session-usage__label {

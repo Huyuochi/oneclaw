@@ -2,6 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   beginSessionUsageLoad,
+  SESSION_USAGE_DETAIL_LIST_MAX_HEIGHT_PX,
+  SESSION_USAGE_DETAIL_ROW_HEIGHT_PX,
+  SESSION_USAGE_DETAIL_VISIBLE_ROW_LIMIT,
   loadSessionUsageSnapshot,
   mapEntries,
   isRecord,
@@ -172,4 +175,12 @@ test("mapEntries sorts rows by updatedAt desc without a display cap", () => {
   assert.deepEqual(result.totals, { input: 250, output: 500, cacheRead: 750 });
   assert.equal(result.rows[0]!.updatedAt, 249);
   assert.equal(result.rows[249]!.updatedAt, 0);
+});
+
+test("session usage details list is capped at ten visible rows before scrolling", () => {
+  assert.equal(SESSION_USAGE_DETAIL_VISIBLE_ROW_LIMIT, 10);
+  assert.equal(
+    SESSION_USAGE_DETAIL_LIST_MAX_HEIGHT_PX,
+    SESSION_USAGE_DETAIL_VISIBLE_ROW_LIMIT * SESSION_USAGE_DETAIL_ROW_HEIGHT_PX,
+  );
 });

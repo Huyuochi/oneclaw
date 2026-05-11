@@ -32,6 +32,11 @@ interface MapResult {
 
 type GatewayRequest = <T = unknown>(method: string, params?: unknown) => Promise<T>;
 
+export const SESSION_USAGE_DETAIL_VISIBLE_ROW_LIMIT = 10;
+export const SESSION_USAGE_DETAIL_ROW_HEIGHT_PX = 36;
+export const SESSION_USAGE_DETAIL_LIST_MAX_HEIGHT_PX =
+  SESSION_USAGE_DETAIL_VISIBLE_ROW_LIMIT * SESSION_USAGE_DETAIL_ROW_HEIGHT_PX;
+
 export interface SessionUsageLoadFlags {
   initialized: boolean;
   loading: boolean;
@@ -130,6 +135,7 @@ export function mapEntries(payload: unknown): MapResult {
 
 export async function loadSessionUsageSnapshot(request: GatewayRequest): Promise<MapResult> {
   // Re-sum totals locally from the mapped rows to stay consistent with what we render.
+  // Intentionally rely on the gateway's default scope: last 30 days, max 50 sessions.
   const usage = await request("sessions.usage");
   return mapEntries(usage);
 }
