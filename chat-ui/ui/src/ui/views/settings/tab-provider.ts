@@ -15,6 +15,7 @@ import {
   PROVIDERS, CUSTOM_PRESETS, KIMI_CODE_MODELS, SUB_PLATFORM_URLS,
   CUSTOM_MODEL_SENTINEL, PROVIDER_DISPLAY_ORDER, getProviderLabels,
 } from "../setup/setup-constants.ts";
+import { resolveAddedModelKey } from "./tab-provider-save-state.ts";
 
 /* ── types ── */
 
@@ -399,6 +400,8 @@ async function handleSetDefault(modelKey: string, state: AppViewState) {
 
 async function handleSave(state: AppViewState) {
   if (s.saving) return;
+  const modeBeforeSave = s.editMode;
+  const previousModelKeys = new Set(s.configuredModels.map(m => m.key));
   const isKimiCode = isKimiCodeProvider();
   let apiKey = s.apiKey.trim();
   if (isKimiCode && s.pendingOAuthToken) apiKey = s.pendingOAuthToken;
@@ -437,7 +440,7 @@ async function handleSave(state: AppViewState) {
     // edit 模式不默认改变默认模型，只有用户显式操作才发送 setAsDefault
     if (shouldKeepKimiProxyAuth()) payload.keepProxyAuth = true;
 
-    await ipc.settingsSaveProvider(payload);
+    const saveResult = await ipc.settingsSaveProvider(payload);
     s.saving = false;
     s.pendingOAuthToken = null;
     s.successMsg = t("settings.saved");
@@ -449,6 +452,13 @@ async function handleSave(state: AppViewState) {
     } catch {}
 
     await refreshModelList(state);
+    if (modeBeforeSave === "add") {
+      const addedModelKey = resolveAddedModelKey(saveResult, previousModelKeys, s.configuredModels);
+      if (addedModelKey) {
+        selectModelInList(addedModelKey, state);
+        s.successMsg = t("settings.saved");
+      }
+    }
   } catch (e: any) {
     s.error = e?.message ?? t("setup.error.connection");
     s.saving = false;
