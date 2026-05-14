@@ -134,7 +134,6 @@ export async function probeImageSupport(params: ImageProbeParams): Promise<Image
         headers,
         body: JSON.stringify({
           model: modelID,
-          max_tokens: 1,
           messages: [{
             role: "user",
             content: [

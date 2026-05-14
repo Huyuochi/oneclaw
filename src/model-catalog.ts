@@ -17,11 +17,14 @@ function normalizeInput(raw: unknown): CatalogInput | undefined {
   if (typeof raw !== "string") return undefined;
   const trimmed = raw.replace(/\s+/g, "");
   if (trimmed === "text") return "text";
-  if (trimmed === "text,image" || trimmed === "image,text") return "text,image";
+  if (
+    trimmed === "text,image" || trimmed === "image,text" ||
+    trimmed === "text+image" || trimmed === "image+text"
+  ) return "text,image";
   return undefined;
 }
 
-function parseCatalog(json: string): ModelCatalog {
+export function parseCatalog(json: string): ModelCatalog {
   const root = JSON.parse(json) as { models?: unknown };
   const models = Array.isArray(root.models) ? root.models : [];
   const cat: ModelCatalog = { byKey: new Map(), byModelId: new Map() };
