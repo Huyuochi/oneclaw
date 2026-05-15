@@ -85,7 +85,7 @@ function isExplicitImageUnsupported(code: number | undefined, message: string): 
   // 探测请求总是带 multimodal body（image_url / input_image / inline_data + 文本）。
   // 文本-only 上游对这种 body 形状的 4xx 拒收，等价于"不支持图片输入"。
   return (
-    /content\s+(must|should)\s+be\s+(a\s+)?string|content\s+is\s+not\s+of\s+type\s+string|expected\s+string,?\s+(but\s+)?got\s+array|(unknown|unrecognized|invalid|unexpected)\s+(field|parameter|property|key)[^.]*image_url/.test(lower) ||
+    /content\s+(must|should)\s+be\s+(a\s+)?string|content\s+is\s+not\s+of\s+type\s+string|expected\s+string,?\s+(but\s+)?got\s+array|(unknown|unrecognized|invalid|unexpected)\s+(field|parameter|property|key|variant)[^.]*image_url/.test(lower) ||
     /content\s*必须是字符串|content\s*不是字符串/.test(message)
   );
 }
