@@ -10,6 +10,7 @@ interface ModelCatalog {
 }
 
 type CatalogRunResult = { stdout: string; stderr: string; code: number };
+type CatalogLookupOptions = { allowModelIdFallback?: boolean };
 
 const CATALOG_TIMEOUT_MS = 60_000;
 
@@ -28,6 +29,8 @@ export function parseCatalog(json: string): ModelCatalog {
   const root = JSON.parse(json) as { models?: unknown };
   const models = Array.isArray(root.models) ? root.models : [];
   const cat: ModelCatalog = { byKey: new Map(), byModelId: new Map() };
+  const byModelIdKey = new Map<string, string>();
+  const ambiguousModelIds = new Set<string>();
   for (const entry of models) {
     if (!entry || typeof entry !== "object") continue;
     const e = entry as { key?: unknown; input?: unknown };
@@ -38,18 +41,30 @@ export function parseCatalog(json: string): ModelCatalog {
     const slash = e.key.indexOf("/");
     if (slash >= 0) {
       const modelId = e.key.slice(slash + 1);
-      if (modelId) cat.byModelId.set(modelId, input);
+      if (!modelId || ambiguousModelIds.has(modelId)) continue;
+      const existingKey = byModelIdKey.get(modelId);
+      if (!existingKey || existingKey === e.key) {
+        byModelIdKey.set(modelId, e.key);
+        cat.byModelId.set(modelId, input);
+      } else {
+        cat.byModelId.delete(modelId);
+        ambiguousModelIds.add(modelId);
+      }
     }
   }
   return cat;
 }
 
-function lookupInCatalog(
+export function lookupInCatalog(
   cat: ModelCatalog,
   providerKey: string,
   modelId: string,
+  options: CatalogLookupOptions = {},
 ): CatalogInput | undefined {
-  return cat.byKey.get(`${providerKey}/${modelId}`) ?? cat.byModelId.get(modelId);
+  const exact = cat.byKey.get(`${providerKey}/${modelId}`);
+  if (exact) return exact;
+  if (options.allowModelIdFallback === false) return undefined;
+  return cat.byModelId.get(modelId);
 }
 
 function runCatalogCli(): Promise<CatalogRunResult> {
@@ -117,6 +132,7 @@ async function loadCatalogOnce(): Promise<ModelCatalog | undefined> {
 export async function lookupModelInput(
   providerKey: string,
   modelId: string,
+  options: CatalogLookupOptions = {},
 ): Promise<CatalogInput | undefined> {
   if (!cachedCatalog) {
     if (!inflight) {
@@ -126,5 +142,5 @@ export async function lookupModelInput(
     if (!loaded) return undefined;
     cachedCatalog = loaded;
   }
-  return lookupInCatalog(cachedCatalog, providerKey, modelId);
+  return lookupInCatalog(cachedCatalog, providerKey, modelId, options);
 }

@@ -477,6 +477,12 @@ export type VerifyProviderResult = {
   supportsImage?: boolean;
 };
 
+type ImageSupportDeps = {
+  probeImageSupport?: typeof probeImageSupport;
+  lookupModelInput?: typeof lookupModelInput;
+  request?: typeof jsonRequest;
+};
+
 function resolveImageProbeConfig(params: VerifyProviderParams): {
   apiType: string;
   baseURL?: string;
@@ -513,29 +519,54 @@ function resolveImageProbeConfig(params: VerifyProviderParams): {
   return null;
 }
 
-async function resolveVerifiedImageSupport(
+export async function resolveVerifiedImageSupport(
   params: VerifyProviderParams,
+  deps: ImageSupportDeps = {},
 ): Promise<boolean | undefined> {
   const probeConfig = resolveImageProbeConfig(params);
   if (!probeConfig) return undefined;
-  const outcome: ImageProbeOutcome = await probeImageSupport({
+  const outcome: ImageProbeOutcome = await (deps.probeImageSupport ?? probeImageSupport)({
     ...probeConfig,
     modelID: params.modelID,
     apiKey: params.apiKey,
-    request: jsonRequest,
+    request: deps.request ?? jsonRequest,
   });
-  return resolveImageSupportFromOutcome(params.provider, params.modelID, outcome);
+
+  let catalogProviderKey = params.provider;
+  let allowModelIdFallback = true;
+  if (params.provider === "moonshot") {
+    const sub = MOONSHOT_SUB_PLATFORMS[params.subPlatform || "moonshot-cn"] || MOONSHOT_SUB_PLATFORMS["moonshot-cn"];
+    catalogProviderKey = sub.providerKey;
+  } else if (params.provider === "custom") {
+    const customPre = params.customPreset ? CUSTOM_PROVIDER_PRESETS[params.customPreset] : undefined;
+    if (customPre) {
+      catalogProviderKey = customPre.providerKey;
+    } else {
+      catalogProviderKey = params.baseURL ? deriveCustomConfigKey(params.baseURL) : "custom";
+      allowModelIdFallback = false;
+    }
+  }
+
+  return resolveImageSupportFromOutcome(
+    catalogProviderKey,
+    params.modelID,
+    outcome,
+    allowModelIdFallback,
+    deps.lookupModelInput ?? lookupModelInput,
+  );
 }
 
 async function resolveImageSupportFromOutcome(
   providerKey: string,
   modelId: string | undefined,
   outcome: ImageProbeOutcome,
+  allowModelIdFallback = true,
+  lookup: typeof lookupModelInput = lookupModelInput,
 ): Promise<boolean> {
   if (outcome.kind === "supported") return true;
   if (outcome.kind === "unsupported") return false;
   if (!modelId) return false;
-  const input = await lookupModelInput(providerKey, modelId);
+  const input = await lookup(providerKey, modelId, { allowModelIdFallback });
   return input === "text,image";
 }
 
