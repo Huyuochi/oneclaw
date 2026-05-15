@@ -12,7 +12,9 @@ interface ModelCatalog {
 type CatalogRunResult = { stdout: string; stderr: string; code: number };
 type CatalogLookupOptions = { allowModelIdFallback?: boolean };
 
-const CATALOG_TIMEOUT_MS = 60_000;
+// Windows 上 npm/node spawn 冷启动明显更慢（首次 catalog 拉取需要解 ASAR、加载
+// gateway 依赖、读注册表），60s 偶发 TIMEOUT。其他平台维持 60s。
+const CATALOG_TIMEOUT_MS = process.platform === "win32" ? 120_000 : 60_000;
 
 function normalizeInput(raw: unknown): CatalogInput | undefined {
   if (typeof raw !== "string") return undefined;
