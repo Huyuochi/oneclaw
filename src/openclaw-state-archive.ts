@@ -80,7 +80,8 @@ export async function importOpenclawStateFromArchive(
   // Caller validates via validateOpenclawStateArchive before stopping the gateway,
   // so the archive is already known-good by the time we reach this destructive step.
   // Full replacement is intentional: the Settings UI requires explicit user
-  // confirmation before reaching this path, so deletions are an accepted restore risk.
+  // confirmation before reaching this path, so deletions and extraction failures
+  // are accepted restore risks borne by the user.
   clearStateDirForImport(stateDir);
   await readArchive(zipPath, stateDir, stateDir);
   removeVolatileRuntimeFiles(stateDir);
