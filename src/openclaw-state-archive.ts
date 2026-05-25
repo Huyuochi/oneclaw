@@ -77,11 +77,9 @@ export async function importOpenclawStateFromArchive(
   stateDir: string,
 ): Promise<void> {
   assertArchiveOutsideStateDir(zipPath, stateDir);
-  // Caller validates via validateOpenclawStateArchive before stopping the gateway,
-  // so the archive is already known-good by the time we reach this destructive step.
-  // Full replacement is intentional: the Settings UI requires explicit user
-  // confirmation before reaching this path, so deletions and extraction failures
-  // are accepted restore risks borne by the user.
+  // Revalidate at the destructive boundary: the selected ZIP path can change
+  // while the gateway is stopping, and clearing the current state is irreversible.
+  await validateOpenclawStateArchive(zipPath, stateDir);
   clearStateDirForImport(stateDir);
   await readArchive(zipPath, stateDir, stateDir);
   removeVolatileRuntimeFiles(stateDir);
