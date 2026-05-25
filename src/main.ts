@@ -41,6 +41,7 @@ import { startTokenRefresh, stopTokenRefresh, loadOAuthToken } from "./kimi-oaut
 import { startAuthProxy, stopAuthProxy, setProxyAccessToken, setProxySearchDedicatedKey, getProxyPort } from "./kimi-auth-proxy";
 import { importOpenclawStateFromArchive, validateOpenclawStateArchive } from "./openclaw-state-archive";
 import { createOpenclawStateImportLifecycle } from "./openclaw-state-import-lifecycle";
+import { reconcileHostStateAfterOpenclawImport } from "./openclaw-state-import-host-reconcile";
 import * as log from "./logger";
 import * as analytics from "./analytics";
 
@@ -508,6 +509,7 @@ const openclawStateImportLifecycle = createOpenclawStateImportLifecycle({
   validateArchive: (filePath) => validateOpenclawStateArchive(filePath, resolveUserStateDir()),
   stopGateway: () => gateway.stop({ waitForStarting: true }),
   importArchive: (filePath) => log.withFileLoggingPaused(() => importOpenclawStateFromArchive(filePath, resolveUserStateDir())),
+  reconcileHostState: reconcileHostStateAfterOpenclawImport,
   startGateway: async () => {
     const running = await ensureGatewayRunning("settings:import-openclaw-state");
     if (!running) {

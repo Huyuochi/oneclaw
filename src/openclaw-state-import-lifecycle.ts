@@ -5,6 +5,7 @@ type OpenclawStateImportLifecycleDeps = {
   validateArchive: (filePath: string) => Promise<void>;
   stopGateway: () => Promise<void>;
   importArchive: (filePath: string) => Promise<void>;
+  reconcileHostState: () => Promise<void>;
   startGateway: () => Promise<void>;
 };
 
@@ -24,6 +25,7 @@ export function createOpenclawStateImportLifecycle(deps: OpenclawStateImportLife
         await deps.validateArchive(filePath);
         await deps.stopGateway();
         await deps.importArchive(filePath);
+        await deps.reconcileHostState();
         await deps.startGateway();
       } finally {
         importActive = false;
