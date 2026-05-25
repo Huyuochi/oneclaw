@@ -256,6 +256,14 @@ function replaceNodeBinary(platform, targetBase, productName) {
       console.log(`[afterPack] 已删除 runtime/node.exe (${sizeMB} MB)`);
     }
 
+    // 写入 node.cmd 代理：与 macOS 的 runtime/node shell 代理对称，
+    // 让 `node <script.js>` 在 Windows 上也能落到带 ELECTRON_RUN_AS_NODE 的
+    // Helper exe，从而读取 gateway.asar 内的 JS 文件（例如内置 skill 脚本）。
+    const nodeCmdPath = path.join(runtimeDir, "node.cmd");
+    const nodeScript = buildWindowsNodeProxyScript(productName);
+    fs.writeFileSync(nodeCmdPath, nodeScript, "utf-8");
+    console.log(`[afterPack] 已写入 Windows node.cmd 代理`);
+
     const npmCmdPath = path.join(runtimeDir, "npm.cmd");
     if (fs.existsSync(npmCmdPath)) {
       const npmScript = buildWindowsElectronProxyScript(productName, "%~dp0node_modules\\npm\\bin\\npm-cli.js");
@@ -284,6 +292,24 @@ function buildWindowsElectronProxyScript(productName, cliEntryPath) {
     `  "%APP_HELPER%" "${cliEntryPath}" %*`,
     ") else (",
     `  "%APP_EXE%" "${cliEntryPath}" %*`,
+    ")",
+  ].join("\r\n") + "\r\n";
+}
+
+// 与 buildWindowsElectronProxyScript 的区别：不绑定固定的 CLI 入口脚本，
+// 整个 argv (%*) 原样转发给 Helper exe，行为对齐 macOS 的 `runtime/node` 代理。
+function buildWindowsNodeProxyScript(productName) {
+  const mainExe = `%~dp0..\\..\\..\\${productName}.exe`;
+  const helperExe = `%~dp0..\\..\\..\\${productName} Helper.exe`;
+  return [
+    "@echo off",
+    'set "ELECTRON_RUN_AS_NODE=1"',
+    `set "APP_EXE=${mainExe}"`,
+    `set "APP_HELPER=${helperExe}"`,
+    'if exist "%APP_HELPER%" (',
+    '  "%APP_HELPER%" %*',
+    ") else (",
+    '  "%APP_EXE%" %*',
     ")",
   ].join("\r\n") + "\r\n";
 }

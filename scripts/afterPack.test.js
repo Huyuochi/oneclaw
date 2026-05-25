@@ -21,7 +21,7 @@ function loadAfterPackSandbox(scriptPath = path.join(__dirname, "afterPack.js"))
   return sandbox;
 }
 
-test("Windows afterPack wrapper 应优先调用 Helper.exe 并回退主 exe", () => {
+test("Windows afterPack wrapper 应优先调用 Helper.exe 并回退主 exe，同时写入 node.cmd 代理", () => {
   const sandbox = loadAfterPackSandbox();
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "oneclaw-afterpack-"));
   const targetBase = path.join(tmpRoot, "resources");
@@ -39,6 +39,14 @@ test("Windows afterPack wrapper 应优先调用 Helper.exe 并回退主 exe", ()
   assert.match(npmCmd, /if exist/i);
   assert.match(npmCmd, /OneClaw\.exe/);
 
+  // node.cmd 代理：与 macOS runtime/node 对称，原样转发 %*，不绑定 CLI 入口
+  assert.equal(fs.existsSync(path.join(runtimeDir, "node.cmd")), true);
+  const nodeCmd = fs.readFileSync(path.join(runtimeDir, "node.cmd"), "utf-8");
+  assert.match(nodeCmd, /ELECTRON_RUN_AS_NODE=1/);
+  assert.match(nodeCmd, /OneClaw Helper\.exe/);
+  assert.match(nodeCmd, /%\*/);
+  assert.doesNotMatch(nodeCmd, /npm-cli\.js|npx-cli\.js/);
+
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
@@ -49,6 +57,8 @@ test("Windows afterPack 应保留展开的 gateway node_modules 而不是生成 
   const runtimeDir = path.join(resourcesDir, "runtime");
   const gatewayDir = path.join(resourcesDir, "gateway");
   const modulesDir = path.join(gatewayDir, "node_modules");
+  const mirrorDir = path.join(resourcesDir, "extensions-mirror");
+  const webbridgeDir = path.join(tmpRoot, "resources", "webbridge");
   const scriptPath = path.join(scriptDir, "afterPack.js");
 
   fs.mkdirSync(scriptDir, { recursive: true });
@@ -67,6 +77,11 @@ test("Windows afterPack 应保留展开的 gateway node_modules 而不是生成 
   fs.writeFileSync(path.join(modulesDir, "clawhub", "bin", "clawdhub.js"), "console.log('clawhub');\n");
   fs.writeFileSync(path.join(gatewayDir, "gateway-entry.mjs"), "export {};\n");
   fs.writeFileSync(path.join(resourcesDir, "build-config.json"), "{}\n");
+  fs.mkdirSync(path.join(mirrorDir, "openclaw-wecom"), { recursive: true });
+  fs.writeFileSync(path.join(mirrorDir, "openclaw-wecom", "package.json"), "{}\n");
+  fs.mkdirSync(webbridgeDir, { recursive: true });
+  fs.writeFileSync(path.join(webbridgeDir, "kimi-webbridge.crx"), "crx");
+  fs.writeFileSync(path.join(webbridgeDir, "kimi-webbridge.json"), "{}\n");
 
   const sandbox = loadAfterPackSandbox(scriptPath);
   const appOutDir = path.join(tmpRoot, "out");
