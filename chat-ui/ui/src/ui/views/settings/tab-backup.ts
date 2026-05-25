@@ -239,7 +239,7 @@ export function renderTabBackup(state: AppViewState, notice: string | null) {
                 ${t("settings.backup.restart")}
               </button>
               <button class="oc-settings__btn oc-settings__btn--primary oc-settings__btn--compact" ?disabled=${actionDisabled} @click=${() => handleGatewayAction(state, "stop")}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
                 ${t("settings.backup.stop")}
               </button>
             ` : nothing}
@@ -262,9 +262,11 @@ export function renderTabBackup(state: AppViewState, notice: string | null) {
           </div>
           <div class="oc-settings-backup__openclaw-state-actions">
             <button class="oc-settings__btn oc-settings__btn--primary oc-settings__btn--compact" ?disabled=${actionDisabled} @click=${() => handleExportOpenclawState(state)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v6h16v-6"/><path d="m8 7 4-4 4 4"/><path d="M12 3v9"/></svg>
               ${t("settings.backup.openclawStateExport")}
             </button>
             <button class="oc-settings__btn oc-settings__btn--primary oc-settings__btn--compact" ?disabled=${actionDisabled} @click=${() => handleImportOpenclawState(state)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v6h16v-6"/><path d="M12 3v9"/><path d="m8 8 4 4 4-4"/></svg>
               ${t("settings.backup.openclawStateImport")}
             </button>
           </div>
@@ -297,6 +299,10 @@ styleSheet.replaceSync(/* css */`
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+  }
+  .oc-settings-backup__card-header .oc-settings__btn--compact {
+    min-width: 80px;
+    justify-content: center;
   }
   .oc-settings-backup__meta {
     font-size: 12.5px;

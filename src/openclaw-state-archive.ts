@@ -26,9 +26,9 @@ type OpenclawStateEntry = {
 const ZIP_CHUNK_SIZE = 64 * 1024;
 const ARCHIVE_MARKER_NAME = ".oneclaw-openclaw-state-archive";
 const ARCHIVE_MARKER_CONTENT = "oneclaw-openclaw-state-archive/v1\n";
-// Runtime-only locks are host-specific; they are skipped on export and stripped
-// again after import in case a third-party archive includes them.
-const VOLATILE_RUNTIME_FILES = new Set(["gateway.lock"]);
+// Runtime-only locks/logs are host-specific; they are skipped on export and
+// stripped again after import in case a third-party archive includes them.
+const VOLATILE_RUNTIME_FILES = new Set(["app.log", "gateway.lock", "gateway.log"]);
 
 export async function exportOpenclawStateToArchive(
   stateDir: string,
@@ -40,7 +40,20 @@ export async function exportOpenclawStateToArchive(
 
   try {
     if (fs.existsSync(stateDir)) {
-      fs.cpSync(stateDir, snapshotDir, { recursive: true, force: true, verbatimSymlinks: true });
+      const stateRoot = path.resolve(stateDir);
+      fs.cpSync(stateDir, snapshotDir, {
+        recursive: true,
+        force: true,
+        verbatimSymlinks: true,
+        filter: (src) => {
+          // Filter root runtime files before cp opens them; nested same-name
+          // files can be user data and must remain exportable.
+          const srcPath = path.resolve(src);
+          if (path.dirname(srcPath) !== stateRoot) return true;
+          const name = path.basename(srcPath);
+          return !VOLATILE_RUNTIME_FILES.has(name) && name !== ARCHIVE_MARKER_NAME;
+        },
+      });
     }
     const entries = collectOpenclawStateEntries(snapshotDir);
 
@@ -126,14 +139,18 @@ function collectOpenclawStateEntries(stateDir: string): OpenclawStateEntry[] {
       .sort((a, b) => a.name.localeCompare(b.name));
 
     for (const child of children) {
-      const absPath = path.join(dir, child.name);
-      const stat = fs.lstatSync(absPath);
       const childSegments = [...relSegments, child.name];
       const relPath = childSegments.join("/");
 
-      if (relSegments.length === 0 && (VOLATILE_RUNTIME_FILES.has(child.name) || child.name === ARCHIVE_MARKER_NAME)) {
+      if (
+        relSegments.length === 0 &&
+        (VOLATILE_RUNTIME_FILES.has(child.name) || child.name === ARCHIVE_MARKER_NAME)
+      ) {
         continue;
       }
+
+      const absPath = path.join(dir, child.name);
+      const stat = fs.lstatSync(absPath);
 
       if (stat.isSymbolicLink()) {
         throw new Error(`不支持的 .openclaw 条目: ${relPath}`);
@@ -173,21 +190,21 @@ function removeArchiveMarker(stateDir: string): void {
 
 function validateArchiveMarker(entryNames: string[], entryContents: Map<string, Buffer>): void {
   if (!entryNames.includes(ARCHIVE_MARKER_NAME)) {
-    throw new Error("不是 OneClaw .openclaw 数据包：缺少归档标记。");
+    throw new Error("不是 OneClaw .openclaw 数据包");
   }
   if (entryNames.some((name) => name === ".openclaw" || name === ".openclaw/" || name.startsWith(".openclaw/"))) {
-    throw new Error("OneClaw .openclaw 数据包不能包含嵌套的 .openclaw 根目录。");
+    throw new Error("不是 OneClaw .openclaw 数据包");
   }
   if (!entryNames.includes("openclaw.json")) {
-    throw new Error("不是 OneClaw .openclaw 数据包：缺少根目录 openclaw.json。");
+    throw new Error("不是 OneClaw .openclaw 数据包");
   }
   const markerContent = entryContents.get(ARCHIVE_MARKER_NAME);
   if (!markerContent?.equals(Buffer.from(ARCHIVE_MARKER_CONTENT, "utf8"))) {
-    throw new Error("不是 OneClaw .openclaw 数据包：归档标记内容不匹配。");
+    throw new Error("不是 OneClaw .openclaw 数据包");
   }
   const configContent = entryContents.get("openclaw.json");
   if (!configContent) {
-    throw new Error("不是 OneClaw .openclaw 数据包：无法读取根目录 openclaw.json。");
+    throw new Error("不是 OneClaw .openclaw 数据包");
   }
   try {
     const config = JSON.parse(configContent.toString("utf8"));
@@ -195,7 +212,7 @@ function validateArchiveMarker(entryNames: string[], entryContents: Map<string, 
       throw new Error("root must be an object");
     }
   } catch {
-    throw new Error("不是 OneClaw .openclaw 数据包：根目录 openclaw.json 不是有效 JSON 对象。");
+    throw new Error("不是 OneClaw .openclaw 数据包");
   }
 }
 

@@ -119,7 +119,6 @@
 | `settingsListConfigBackups()` | `settings:list-config-backups` | invoke |
 | `settingsExportOpenclawState()` | `settings:export-openclaw-state` | invoke |
 | `settingsSelectOpenclawStateArchive()` | `settings:select-openclaw-state-archive` | invoke |
-| `settingsValidateOpenclawStateArchive(params)` | `settings:validate-openclaw-state-archive` | invoke |
 | `settingsImportOpenclawState(params)` | `settings:import-openclaw-state` | invoke |
 | `settingsRestoreConfigBackup(params)` | `settings:restore-config-backup` | invoke |
 | `settingsRestoreLastKnownGood()` | `settings:restore-last-known-good` | invoke |

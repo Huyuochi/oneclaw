@@ -19,7 +19,7 @@ const WINDOWS_ILLEGAL_CHARS = /[<>:"|?*]/;
 const CASE_INSENSITIVE_PLATFORM = process.platform === "win32" || process.platform === "darwin";
 
 export function buildOpenclawStateArchiveDefaultFileName(date: Date = new Date()): string {
-  return `oneclaw-openclaw-${formatTimestamp(date)}.zip`;
+  return `oneclaw-${formatTimestamp(date)}.zip`;
 }
 
 export function createPathRegistry(rootDir: string): PathRegistry {
