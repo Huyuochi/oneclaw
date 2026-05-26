@@ -21,7 +21,7 @@ import {
   setProgressCallback,
   setUpdateBannerStateCallback,
 } from "./auto-updater";
-import { isSetupComplete, resolveGatewayPort, resolveGatewayLogPath, resolveUserStateDir } from "./constants";
+import { isSetupComplete, resolveGatewayPort, resolveGatewayLogPath, resolveUserStateDir, resolveUserConfigPath } from "./constants";
 import { resolveGatewayAuthToken } from "./gateway-auth";
 import {
   getConfigRecoveryData,
@@ -40,6 +40,7 @@ import { detectOwnership, migrateFromLegacy, readOneclawConfig, writeOneclawConf
 import { startTokenRefresh, stopTokenRefresh, loadOAuthToken } from "./kimi-oauth";
 import { startAuthProxy, stopAuthProxy, setProxyAccessToken, setProxySearchDedicatedKey, getProxyPort } from "./kimi-auth-proxy";
 import { importOpenclawStateFromArchive, validateOpenclawStateArchive } from "./openclaw-state-archive";
+import { syncOpenClawStateAfterWrite } from "./openclaw-health-state";
 import { createOpenclawStateImportLifecycle } from "./openclaw-state-import-lifecycle";
 import { reconcileHostStateAfterOpenclawImport } from "./openclaw-state-import-host-reconcile";
 import * as log from "./logger";
@@ -510,6 +511,7 @@ const openclawStateImportLifecycle = createOpenclawStateImportLifecycle({
   stopGateway: () => gateway.stop({ waitForStarting: true }),
   importArchive: (filePath) => log.withFileLoggingPaused(() => importOpenclawStateFromArchive(filePath, resolveUserStateDir())),
   reconcileHostState: reconcileHostStateAfterOpenclawImport,
+  syncImportedConfigState: () => syncOpenClawStateAfterWrite(resolveUserConfigPath()),
   startGateway: async () => {
     const running = await ensureGatewayRunning("settings:import-openclaw-state");
     if (!running) {
