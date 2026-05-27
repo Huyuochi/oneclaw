@@ -34,11 +34,11 @@ gateway by raising the file-size cap to 50 MiB and applying no page cap.
                           ┌──────────────────────────────┐
                           │ for each page:               │
                           │   viewport @ scale=1         │
-                          │   scale = min(1, sqrt(       │
-                          │     maxPixels / pagePixels)) │
+                          │   scale down so final canvas │
+                          │     pixels <= maxPixels      │
                           │   render to canvas           │
                           │   toBuffer("image/png")      │
-                          │   write to <outDir>/page-N.png│
+                          │   write to <runDir>/page-N.png│
                           └──────────────┬───────────────┘
                                          ▼
                               JSON with imagePaths[]
@@ -68,12 +68,21 @@ synchronous-on-the-event-loop and avoids "DOMMatrix is not defined" style
 failures. This applies equally to the skill — the skill runs as a one-off
 Node process and has no need (or environment) for a worker.
 
-## Why a scale ceiling of 1
+## Why a scale ceiling of 1 and no lower clamp
 
-Rendering scale uses `min(1, sqrt(pixelBudget / pagePixels))`. A page already
-smaller than the budget should not be **up**scaled — that would waste CPU
-without adding information. The lower bound is `0.1` (`Math.max(0.1, scale)`)
-so that grotesquely large pages still render at a usable resolution.
+Rendering scale never exceeds `1`. A page already smaller than the budget should
+not be **up**scaled — that would waste CPU without adding information. Extremely
+large pages are scaled down as far as needed so the final canvas dimensions stay
+within `maxPixels`; there is no lower scale clamp that can override the pixel
+budget.
+
+## Fallback image directory
+
+When fallback rendering is needed, the script writes PNG files into a unique
+per-run directory. If `--out-dir` is omitted, that directory is created under
+`$TMPDIR`. If `--out-dir` is provided, the unique per-run directory is created
+inside that base directory. This prevents concurrent runs for the same PDF from
+overwriting each other's `page-N.png` files.
 
 ## Why no OCR
 

@@ -16,7 +16,7 @@ type Output = {
    *  rendered to PNG files instead. */
   fallbackImages: boolean;
 
-  /** Absolute paths to rendered PNGs; one per extractedPages entry.
+  /** Absolute paths to rendered PNGs in a unique per-run directory; one per extractedPages entry.
    *  Empty array when fallbackImages=false. */
   imagePaths: string[];
 
@@ -40,7 +40,7 @@ type Output = {
 ### Example — scanned PDF
 
 ```json
-{"text":"","fallbackImages":true,"imagePaths":["/var/folders/.../oneclaw-pdf-abc123/page-1.png","/var/folders/.../oneclaw-pdf-abc123/page-2.png"],"pageCount":2,"extractedPages":[1,2],"truncatedText":false}
+{"text":"","fallbackImages":true,"imagePaths":["/var/folders/.../oneclaw-pdf-abc123-12345-deadbeef/page-1.png","/var/folders/.../oneclaw-pdf-abc123-12345-deadbeef/page-2.png"],"pageCount":2,"extractedPages":[1,2],"truncatedText":false}
 ```
 
 ## stderr
