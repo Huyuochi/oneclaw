@@ -14,7 +14,7 @@
 // or via OPENCLAW_INSTALL_ROOT when copied to the user workspace.
 
 import { readFile, mkdir, writeFile } from "node:fs/promises";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -29,8 +29,18 @@ const DEFAULTS = {
   maxPages: 5_000,  // sanity cap for the implicit all-pages path only
 };
 
+function writeErrorLine(msg) {
+  // fs.writeSync to fd 2 is synchronous and bypasses installQuietOutput's
+  // stderr monkeypatch, so the diagnostic survives the immediately-following
+  // process.exit() on every platform — process.stderr.write over a pipe is
+  // async on Windows and can be dropped on exit. Collapse newlines so the
+  // "single pdf-extract: line" output contract always holds.
+  const oneLine = String(msg).replace(/[\r\n]+/g, " ");
+  try { writeSync(2, `pdf-extract: ${oneLine}\n`); } catch {}
+}
+
 function fail(msg, code = 1) {
-  process.stderr.write(`pdf-extract: ${msg}\n`);
+  writeErrorLine(msg);
   process.exit(code);
 }
 
@@ -115,7 +125,6 @@ function parsePages(spec) {
 function installQuietOutput() {
   const methods = ["debug", "error", "info", "log", "warn"];
   const originalStdoutWrite = process.stdout.write;
-  const originalStderrWrite = process.stderr.write;
   const noopWrite = function (_chunk, encodingOrCallback, callback) {
     if (typeof encodingOrCallback === "function") encodingOrCallback();
     if (typeof callback === "function") callback();
@@ -129,12 +138,11 @@ function installQuietOutput() {
   process.stderr.write = noopWrite;
   process.emitWarning = () => {};
 
+  // Nothing logs after this point except via the returned writer (success
+  // JSON) and writeErrorLine (errors, which go straight to fd 2).
   return {
     writeStdout(chunk) {
       return originalStdoutWrite.call(process.stdout, chunk);
-    },
-    writeStderr(chunk) {
-      return originalStderrWrite.call(process.stderr, chunk);
     },
   };
 }
@@ -208,36 +216,41 @@ async function extractPdf(args, pdfPath, buffer, pageNumbers) {
 
     const textParts = [];
     const textPages = [];
-    let textLen = 0;
+    let textLen = 0;  // exact length of textParts.join("\n\n") so far
     let truncatedText = false;
     for (const pageNum of effectivePages) {
       const page = await pdf.getPage(pageNum);
+      let pageText = "";
       try {
         const content = await page.getTextContent();
-        const pageText = content.items
+        pageText = content.items
           .map((item) => ("str" in item ? String(item.str) : ""))
           .filter(Boolean)
           .join(" ");
-        if (pageText) {
-          textParts.push(pageText);
-          textLen += pageText.length + 2;  // approx the "\n\n" page join
-        }
-        textPages.push(pageNum);
       } finally {
         page.cleanup?.();
       }
-      // Stop once we have enough text to fill the budget — avoids holding every
-      // page's text in memory for very long documents.
-      if (textLen >= DEFAULTS.maxChars) {
+      if (!pageText) continue;  // page contributed no text → not an extracted page
+
+      const sepLen = textParts.length > 0 ? 2 : 0;  // "\n\n" inserted by join
+      const room = DEFAULTS.maxChars - textLen - sepLen;
+      if (pageText.length > room) {
+        // Including this page in full would exceed maxChars. Append a clamped
+        // prefix to fill the budget, but mark the run truncated and do NOT list
+        // this page as fully extracted. Stops once the budget is full, so we
+        // never hold every page's text in memory for very long documents.
+        if (room > 0) {
+          textParts.push(pageText.slice(0, room));
+          textLen += sepLen + room;
+        }
         truncatedText = true;
         break;
       }
+      textParts.push(pageText);
+      textPages.push(pageNum);
+      textLen += sepLen + pageText.length;
     }
-    let text = textParts.join("\n\n");
-    if (text.length > DEFAULTS.maxChars) {
-      text = text.slice(0, DEFAULTS.maxChars);
-      truncatedText = true;
-    }
+    const text = textParts.join("\n\n");
 
     if (text.trim().length >= DEFAULTS.minTextChars) {
       return {
@@ -302,7 +315,7 @@ async function main() {
     const output = await extractPdf(args, pdfPath, buffer, pageNumbers);
     quiet.writeStdout(JSON.stringify(output) + "\n");
   } catch (err) {
-    quiet.writeStderr(`pdf-extract: ${err?.message || String(err)}\n`);
+    writeErrorLine(err?.message || String(err));
     process.exit(1);
   }
 }

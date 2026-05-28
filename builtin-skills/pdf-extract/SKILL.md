@@ -64,16 +64,17 @@ Full schema: see `reference/output-format.md`. Worked examples: see `examples/in
 | Limit          | Value         |
 |----------------|---------------|
 | max file size  | 50 MiB        |
-| max pages      | none          |
+| max pages (no `--pages`) | 5 000 (pass `--pages` to exceed) |
 | max text chars | 200 000       |
 | min text chars | 200 (fallback threshold) |
 | max pixels/page| 4 000 000 (auto-scale) |
 
-Exceeding the 50 MiB file-size limit is a hard error. Page count is intentionally not capped: the skill parses whatever pages the caller requests, or the whole PDF when `--pages` is omitted. `--pages` only accepts comma-separated positive integers such as `1,3,5`; ranges and partial numbers are rejected. The caller accepts large-PDF output quality issues, failure, long runtime, many fallback PNGs, and large context usage risk for broad extraction. Text and pixel budgets remain in place to keep individual outputs bounded.
+Exceeding the 50 MiB file-size limit is a hard error. Explicit `--pages` requests are intentionally uncapped — the skill parses whatever pages the caller selects. The implicit all-pages path (when `--pages` is omitted) has a 5 000-page sanity cap: a document with more pages fails fast and asks the caller to pass an explicit `--pages` subset, so a pathological page count cannot allocate a huge array or render thousands of PNGs. `--pages` only accepts comma-separated positive integers such as `1,3,5`; ranges and partial numbers are rejected. The caller accepts large-PDF output quality issues, failure, long runtime, many fallback PNGs, and large context usage risk for broad extraction. Text and pixel budgets remain in place to keep individual outputs bounded.
 
 ## Errors
 
 - File missing → exit `1`, stderr `pdf-extract: file not found: <path>`.
 - File over 50 MiB → exit `1`, stderr `pdf-extract: file too large: ...`.
+- `--pages` omitted on a document with more than 5 000 pages → exit `1`, stderr `pdf-extract: document has <n> pages (limit 5000); pass --pages to select a subset`.
 - `--pages` contains no pages within the document → exit `1`, stderr includes `pageCount`.
 - Native canvas binding missing (scanned-PDF fallback only) → exit `1`. Tell the user the PDF appears to be image-only and the canvas dependency is unavailable in this environment.

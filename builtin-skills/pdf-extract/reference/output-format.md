@@ -23,12 +23,17 @@ type Output = {
   /** Total page count of the source PDF (independent of how many were extracted). */
   pageCount: number;
 
-  /** 1-based page numbers actually extracted after applying --pages, if present.
-   *  In text mode this stops at the page where maxChars was reached, so a
-   *  truncated run lists only the pages read before the cap. */
+  /** 1-based page numbers whose full text is included in `text`, after applying
+   *  --pages. Pages with no extractable text are omitted. In text mode, when the
+   *  maxChars budget is reached, reading stops and the page that could not be
+   *  included in full is omitted — so a truncated run lists only fully-included
+   *  pages. In image mode (fallbackImages=true) it lists every rendered page,
+   *  one per imagePaths entry. */
   extractedPages: number[];
 
-  /** True when the joined text was clamped to maxChars=200_000. */
+  /** True when `text` does not contain the complete text of every requested
+   *  in-range page — i.e. a page was clamped or reading stopped at the
+   *  maxChars=200_000 budget before all pages were read. */
   truncatedText: boolean;
 };
 ```
