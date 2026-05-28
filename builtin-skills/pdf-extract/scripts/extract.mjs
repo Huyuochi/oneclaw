@@ -3,8 +3,10 @@
 //
 // Algorithm ported from openclaw's internal pdf-extract module
 // (gateway: dist/pdf-extract-Obqsm9U3.js + dist/input-files-0oShoO1j.js).
-// Intentional divergences: verbosity: 0 for empty-stderr success output, and
-// 50 MiB / no page-count caps because callers own broad-extraction risk.
+// Intentional divergences: verbosity: 0 for empty-stderr success output, and a
+// 50 MiB cap. Explicit --pages is uncapped (callers own broad-extraction risk),
+// but the implicit all-pages path has a maxPages sanity cap so a pathological
+// page count can't allocate a huge array or render thousands of PNGs.
 // Two-stage: try text via pdfjs getTextContent; if it falls below
 // minTextChars, render each page to PNG via @napi-rs/canvas.
 //
@@ -24,6 +26,7 @@ const DEFAULTS = {
   maxPixels: 4_000_000,
   minTextChars: 200,
   maxChars: 200_000,
+  maxPages: 5_000,  // sanity cap for the implicit all-pages path only
 };
 
 function fail(msg, code = 1) {
@@ -101,11 +104,12 @@ function parsePages(spec) {
   if (!/^[1-9]\d*(\s*,\s*[1-9]\d*)*$/.test(normalized)) {
     fail(`invalid --pages: ${spec}`);
   }
-  return normalized.split(",").map((part) => {
+  const nums = normalized.split(",").map((part) => {
     const n = Number(part.trim());
     if (!Number.isSafeInteger(n)) fail(`invalid --pages: ${spec}`);
     return n;
   });
+  return [...new Set(nums)];  // dedupe, preserving first occurrence
 }
 
 function installQuietOutput() {
@@ -183,66 +187,100 @@ async function extractPdf(args, pdfPath, buffer, pageNumbers) {
   // verbosity: 0 (ERRORS) silences pdfjs warnings on stderr (e.g. "Indexing
   // all PDF objects", "standardFontDataUrl not configured"). installQuietOutput
   // also suppresses pdfjs paths that still write directly to stdio.
-  const pdf = await getDocument({ data: new Uint8Array(buffer), disableWorker: true, verbosity: 0 }).promise;
-  const pageCount = pdf.numPages;
-  const effectivePages = pageNumbers
-    ? pageNumbers.filter((p) => p >= 1 && p <= pageCount)
-    : Array.from({ length: pageCount }, (_, i) => i + 1);
-  if (pageNumbers && effectivePages.length === 0) {
-    throw new Error(`no requested pages within document (pageCount=${pageCount})`);
-  }
+  const loadingTask = getDocument({ data: new Uint8Array(buffer), disableWorker: true, verbosity: 0 });
+  let pdf;
+  try {
+    pdf = await loadingTask.promise;
+    const pageCount = pdf.numPages;
+    // Cap only the implicit all-pages path; explicit --pages is caller-owned.
+    // Checked before Array.from so a pathological pageCount can't OOM here.
+    if (!pageNumbers && pageCount > DEFAULTS.maxPages) {
+      throw new Error(
+        `document has ${pageCount} pages (limit ${DEFAULTS.maxPages}); pass --pages to select a subset`
+      );
+    }
+    const effectivePages = pageNumbers
+      ? pageNumbers.filter((p) => p >= 1 && p <= pageCount)
+      : Array.from({ length: pageCount }, (_, i) => i + 1);
+    if (pageNumbers && effectivePages.length === 0) {
+      throw new Error(`no requested pages within document (pageCount=${pageCount})`);
+    }
 
-  const textParts = [];
-  for (const pageNum of effectivePages) {
-    const page = await pdf.getPage(pageNum);
-    const content = await page.getTextContent();
-    const pageText = content.items
-      .map((item) => ("str" in item ? String(item.str) : ""))
-      .filter(Boolean)
-      .join(" ");
-    if (pageText) textParts.push(pageText);
-  }
-  let text = textParts.join("\n\n");
-  let truncatedText = false;
-  if (text.length > DEFAULTS.maxChars) {
-    text = text.slice(0, DEFAULTS.maxChars);
-    truncatedText = true;
-  }
+    const textParts = [];
+    const textPages = [];
+    let textLen = 0;
+    let truncatedText = false;
+    for (const pageNum of effectivePages) {
+      const page = await pdf.getPage(pageNum);
+      try {
+        const content = await page.getTextContent();
+        const pageText = content.items
+          .map((item) => ("str" in item ? String(item.str) : ""))
+          .filter(Boolean)
+          .join(" ");
+        if (pageText) {
+          textParts.push(pageText);
+          textLen += pageText.length + 2;  // approx the "\n\n" page join
+        }
+        textPages.push(pageNum);
+      } finally {
+        page.cleanup?.();
+      }
+      // Stop once we have enough text to fill the budget — avoids holding every
+      // page's text in memory for very long documents.
+      if (textLen >= DEFAULTS.maxChars) {
+        truncatedText = true;
+        break;
+      }
+    }
+    let text = textParts.join("\n\n");
+    if (text.length > DEFAULTS.maxChars) {
+      text = text.slice(0, DEFAULTS.maxChars);
+      truncatedText = true;
+    }
 
-  if (text.trim().length >= DEFAULTS.minTextChars) {
+    if (text.trim().length >= DEFAULTS.minTextChars) {
+      return {
+        text, fallbackImages: false, imagePaths: [],
+        pageCount, extractedPages: textPages, truncatedText,
+      };
+    }
+
+    let createCanvas;
+    try {
+      ({ createCanvas } = await importGatewayDependency("@napi-rs/canvas"));
+    } catch (err) {
+      throw new Error(`@napi-rs/canvas not available for scanned-PDF fallback: ${err.message}`);
+    }
+
+    const outDir = uniqueOutputDir(pdfPath, args.outDir);
+    await mkdir(outDir, { recursive: true });
+
+    const imagePaths = [];
+    for (const pageNum of effectivePages) {
+      const page = await pdf.getPage(pageNum);
+      try {
+        const viewport = page.getViewport({ scale: 1 });
+        const fitted = fitCanvasToPixelBudget(page, viewport, DEFAULTS.maxPixels);
+        const canvas = createCanvas(fitted.width, fitted.height);
+        await page.render({ canvas, viewport: fitted.viewport }).promise;
+        const png = canvas.toBuffer("image/png");
+        const out = path.join(outDir, `page-${pageNum}.png`);
+        await writeFile(out, png);
+        imagePaths.push(out);
+      } finally {
+        page.cleanup?.();
+      }
+    }
+
     return {
-      text, fallbackImages: false, imagePaths: [],
+      text, fallbackImages: true, imagePaths,
       pageCount, extractedPages: effectivePages, truncatedText,
     };
+  } finally {
+    try { await pdf?.cleanup?.(); } catch {}
+    try { await loadingTask?.destroy?.(); } catch {}
   }
-
-  let createCanvas;
-  try {
-    ({ createCanvas } = await importGatewayDependency("@napi-rs/canvas"));
-  } catch (err) {
-    throw new Error(`@napi-rs/canvas not available for scanned-PDF fallback: ${err.message}`);
-  }
-
-  const outDir = uniqueOutputDir(pdfPath, args.outDir);
-  await mkdir(outDir, { recursive: true });
-
-  const imagePaths = [];
-  for (const pageNum of effectivePages) {
-    const page = await pdf.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 1 });
-    const fitted = fitCanvasToPixelBudget(page, viewport, DEFAULTS.maxPixels);
-    const canvas = createCanvas(fitted.width, fitted.height);
-    await page.render({ canvas, viewport: fitted.viewport }).promise;
-    const png = canvas.toBuffer("image/png");
-    const out = path.join(outDir, `page-${pageNum}.png`);
-    await writeFile(out, png);
-    imagePaths.push(out);
-  }
-
-  return {
-    text, fallbackImages: true, imagePaths,
-    pageCount, extractedPages: effectivePages, truncatedText,
-  };
 }
 
 async function main() {
@@ -250,6 +288,9 @@ async function main() {
   const pdfPath = path.resolve(args.pdfPath);
   if (!existsSync(pdfPath)) fail(`file not found: ${pdfPath}`);
   const stat = statSync(pdfPath);
+  // Reject FIFOs, devices, sockets, dirs: stat.size is meaningless for them and
+  // readFile() on a pipe or character device can block forever or read until OOM.
+  if (!stat.isFile()) fail(`not a regular file: ${pdfPath}`);
   if (stat.size > DEFAULTS.maxBytes) {
     fail(`file too large: ${stat.size} bytes (limit ${DEFAULTS.maxBytes})`);
   }

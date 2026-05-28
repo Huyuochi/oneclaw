@@ -33,9 +33,9 @@ Output (single line, formatted here for readability):
 `--pages` is 1-based, comma-separated. Pages outside the document are
 dropped only when at least one requested page is in range. If every requested
 page is outside the document, extraction fails with the PDF page count. Every
-valid caller-specified page is extracted; there is no silent page-count cap.
-Ranges (`1-3`), decimals (`1.5`), partial numbers (`3abc`), blank values, and
-missing values are rejected.
+valid caller-specified page is extracted (deduped); explicit `--pages` requests
+are never capped. Ranges (`1-3`), decimals (`1.5`), partial numbers (`3abc`),
+blank values, and missing values are rejected.
 
 ## Scanned / image-only PDF
 

@@ -78,16 +78,18 @@ Do not report dependency discovery failures as PDF parsing failures.
 
 ## Page selection policy
 
-There is no page-count cap. When `--pages` is omitted, the wrapper attempts to
-parse every page in the PDF. When `--pages` is present, the wrapper attempts
-every valid 1-based page number provided by the caller and drops pages outside
-the document only when at least one requested page is in range. If every
-requested page is outside the document, the wrapper fails with the source
-`pageCount`.
+When `--pages` is omitted, the wrapper attempts to parse every page in the PDF,
+unless the document reports more than `maxPages` (5 000) pages — in that case it
+fails fast and asks the caller to pass an explicit `--pages` subset. When
+`--pages` is present, it is uncapped: the wrapper attempts every valid 1-based
+page number provided by the caller and drops pages outside the document only
+when at least one requested page is in range. If every requested page is outside
+the document, the wrapper fails with the source `pageCount`.
 
 `--pages` only accepts comma-separated positive integers such as `1,3,5`.
-Missing values, blank values, ranges such as `1-3`, decimals such as `1.5`,
-and partial numbers such as `3abc` are hard errors.
+Duplicate page numbers are deduped (first occurrence wins). Missing values,
+blank values, ranges such as `1-3`, decimals such as `1.5`, and partial numbers
+such as `3abc` are hard errors.
 
 The caller owns the risk of broad extraction: large PDFs can fail, run for a
 long time, render many fallback PNGs, or fill a large amount of model context.

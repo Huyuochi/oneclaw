@@ -3,7 +3,8 @@
 A small wrapper around openclaw gateway's internal PDF handling (`pdf-extract`
 and `input-files` modules in `node_modules/openclaw/dist/`). It keeps the same
 two-stage strategy and safety budgets, but intentionally diverges from the
-gateway by raising the file-size cap to 50 MiB and applying no page cap.
+gateway by raising the file-size cap to 50 MiB. Explicit `--pages` requests
+stay uncapped; only the implicit all-pages path has a `maxPages` sanity cap.
 
 ## Two-stage extraction
 
@@ -50,15 +51,18 @@ gateway by raising the file-size cap to 50 MiB and applying no page cap.
 |---------------|-------------|---------------------------------------------|
 | `maxBytes`    | 52 428 800  | Skill override (`50 * 1024 * 1024`)         |
 | `maxChars`    | 200 000     | `input-files-0oShoO1j.js:81` (`2e5`)        |
-| page count    | no cap      | Intentional skill divergence                |
+| `maxPages`    | 5 000       | All-pages path only; explicit `--pages` uncapped |
 | `maxPixels`   | 4 000 000   | `input-files-0oShoO1j.js:86` (`4e6`)        |
 | `minTextChars`| 200         | `input-files-0oShoO1j.js:87`                |
 
-The skill intentionally diverges from the gateway file-size and page-count
-defaults. It parses every valid caller-requested page, or the whole PDF when no
+The skill intentionally diverges from the gateway file-size default. It parses
+every valid caller-requested page (deduped, uncapped), or the whole PDF when no
 page list is provided. The caller owns the risk of large-PDF output quality
 issues, failures, long runtime, many fallback PNGs, and large context usage when
-asking for broad extraction.
+asking for broad extraction. The implicit all-pages path is the one exception:
+if the document reports more than `maxPages` pages it fails fast and asks the
+caller to pass an explicit `--pages` subset, so a pathological page count cannot
+allocate a huge array or render thousands of PNGs.
 
 ## Why `disableWorker: true`
 

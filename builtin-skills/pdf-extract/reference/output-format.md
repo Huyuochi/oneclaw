@@ -23,7 +23,9 @@ type Output = {
   /** Total page count of the source PDF (independent of how many were extracted). */
   pageCount: number;
 
-  /** 1-based page numbers that were extracted after applying --pages, if present. */
+  /** 1-based page numbers actually extracted after applying --pages, if present.
+   *  In text mode this stops at the page where maxChars was reached, so a
+   *  truncated run lists only the pages read before the cap. */
   extractedPages: number[];
 
   /** True when the joined text was clamped to maxChars=200_000. */
