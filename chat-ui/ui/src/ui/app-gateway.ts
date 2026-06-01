@@ -5,6 +5,7 @@ import type { GatewayEventFrame, GatewayHelloOk } from "./gateway.ts";
 import type { Tab } from "./navigation.ts";
 import type { UiSettings } from "./storage.ts";
 import type { AgentsListResult, PresenceEntry, HealthSnapshot, SessionsListResult, StatusSummary } from "./types.ts";
+import type { ConfiguredModel } from "./ui-types.ts";
 import { flushChatQueueForEvent, flushPendingSessionLabel, refreshChatAvatar } from "./app-chat.ts";
 import {
   applySettings,
@@ -31,7 +32,7 @@ import {
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadSessions } from "./controllers/sessions.ts";
 import { GatewayBrowserClient } from "./gateway.ts";
-import { applySessionKeyTransition } from "./session-transition.ts";
+import { applySessionKeyTransition, syncCurrentModelFromActiveSession } from "./session-transition.ts";
 import { resolveVisibleSessionSelection } from "./session-visibility.ts";
 import {
   shouldFinishUsageRefreshAttempt,
@@ -60,6 +61,8 @@ type GatewayHost = {
   assistantAvatar: string | null;
   assistantAgentId: string | null;
   sessionKey: string;
+  currentModel: string | null;
+  configuredModels: ConfiguredModel[];
   sessionsLoading: boolean;
   sessionsResult: SessionsListResult | null;
   sessionsError: string | null;
@@ -143,6 +146,7 @@ function reconcileSessionSelection(host: GatewayHost) {
     host.sessionsResult,
   );
   if (!nextSessionKey || nextSessionKey === host.sessionKey) {
+    syncCurrentModelFromActiveSession(host);
     return;
   }
   applySessionKeyTransition(

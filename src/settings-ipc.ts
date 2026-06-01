@@ -340,7 +340,13 @@ export function registerSettingsIpc(opts: SettingsIpcOptions): void {
       const config = readUserConfig();
       const providers = config?.models?.providers ?? {};
       const primary: string = config?.agents?.defaults?.model?.primary ?? "";
-      const result: Array<{ key: string; name: string; provider: string; isDefault: boolean }> = [];
+      const result: Array<{
+        key: string;
+        name: string;
+        provider: string;
+        isDefault: boolean;
+        supportsImage: boolean;
+      }> = [];
 
       for (const [providerKey, prov] of Object.entries(providers)) {
         if (!prov || typeof prov !== "object") continue;
@@ -361,6 +367,10 @@ export function registerSettingsIpc(opts: SettingsIpcOptions): void {
             name,
             provider: displayProvider,
             isDefault: modelKey === primary,
+            // 图片能力只来自配置里的 models[].input，UI 据此做门禁，不新增运行时探测。
+            supportsImage: typeof m === "object" && Array.isArray(m.input)
+              ? m.input.includes("image")
+              : false,
           });
         }
       }

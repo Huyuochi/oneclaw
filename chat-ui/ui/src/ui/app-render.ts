@@ -5,6 +5,7 @@
  */
 import { html, nothing } from "lit";
 import type { AppViewState } from "./app-view-state.ts";
+import type { ChatAttachmentCandidateResult } from "./ui-types.ts";
 import { parseAgentSessionKey } from "../../../src/routing/session-key.js";
 import { refreshChat, refreshChatAvatar } from "./app-chat.ts";
 import { loadChatHistory } from "./controllers/chat.ts";
@@ -40,6 +41,17 @@ import { renderWorkspaceView, initWorkspace } from "./views/workspace.ts";
 import { renderCronManage } from "./views/cron-manage.ts";
 import { loadCronRuns, loadCronJobs, loadCronStatus, removeCronJob, toggleCronJob, runCronJob, addCronJob, updateCronJob } from "./controllers/cron.ts";
 import { DEFAULT_CRON_FORM } from "./app-defaults.ts";
+import {
+  attachmentsBlockedByModel,
+  currentModelSupportsImages,
+  normalizeAttachmentCandidates,
+} from "./chat/attachment-capability.ts";
+import {
+  registerDropAttachmentPending,
+  takeDropAttachmentPending,
+  type DropAttachmentContext,
+  type DropAttachmentPendingRecord,
+} from "./chat/drop-attachment-pending.ts";
 import { isExpiredOneShot } from "./presenter.ts";
 import { pendingSessionLabels, removePendingSessionLabel } from "./session-pending.ts";
 import type { SkillStatusEntry } from "./types.ts";
@@ -1526,24 +1538,114 @@ async function handleApplyUpdate(state: AppViewState) {
 
 // 文件拖拽/粘贴事件桥接
 let fileDropBound = false;
+let latestFileDropState: AppViewState | null = null;
+const pendingFileDrops = new Map<string, DropAttachmentPendingRecord>();
+
+type FileDropStartDetail = {
+  dropId?: string;
+};
+
+type FileDropCompleteDetail = ChatAttachmentCandidateResult & {
+  dropId?: string;
+};
+
+function buildAttachmentContextKey(
+  state: Pick<AppViewState, "sessionKey" | "currentModel" | "chatAttachmentContextGeneration">,
+): string {
+  return `${state.sessionKey}\0${state.currentModel ?? ""}\0${state.chatAttachmentContextGeneration}`;
+}
+
+function buildCurrentDropAttachmentContext(state: AppViewState): DropAttachmentContext {
+  const modelChangePending = state.modelChangePendingSessionKey === state.sessionKey;
+  return {
+    contextKey: buildAttachmentContextKey(state),
+    supportsImages: !modelChangePending && currentModelSupportsImages(
+      state.configuredModels,
+      state.currentModel,
+    ),
+  };
+}
+
+function reportUnsupportedImageAttachment(state: AppViewState, contextKey?: string) {
+  if (contextKey && contextKey !== buildAttachmentContextKey(state)) {
+    return;
+  }
+  state.lastError = t("chat.imageUnsupported");
+  state.requestUpdate();
+}
+
+function appendChatAttachmentsIfContextCurrent(
+  state: AppViewState,
+  additions: ReadonlyArray<NonNullable<AppViewState["chatAttachments"]>[number]>,
+  contextKey: string,
+): boolean {
+  if (!additions.length) {
+    return false;
+  }
+  if (state.captureChatAttachmentAdditions(additions, contextKey)) {
+    return true;
+  }
+  if (contextKey !== buildAttachmentContextKey(state)) {
+    return false;
+  }
+  if (attachmentsBlockedByModel(additions, state.configuredModels, state.currentModel)) {
+    reportUnsupportedImageAttachment(state, contextKey);
+    return false;
+  }
+  state.chatAttachments = [...(state.chatAttachments ?? []), ...additions];
+  return true;
+}
+
+// 拖拽监听器只需绑定一次，但回调必须读到最新 state，所以用 update 桥接当前引用。
 function ensureFileDropBridge(state: AppViewState) {
+  latestFileDropState = state;
   if (fileDropBound) return;
   fileDropBound = true;
-  let latestState = state;
-  // 更新引用以便事件回调能访问最新的 state
-  (window as any).__oneclawFileDropState = { update: (s: AppViewState) => { latestState = s; } };
-  window.addEventListener("oneclaw:file-drop", ((e: CustomEvent<{ paths: string[] }>) => {
-    const current = latestState.chatAttachments ?? [];
-    const additions = e.detail.paths.map((p: string) => ({
-      id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      filePath: p,
-      name: p.split(/[/\\]/).pop() || p,
-    }));
-    latestState.chatAttachments = [...current, ...additions];
+  window.addEventListener("oneclaw:file-drop-start", ((e: CustomEvent<FileDropStartDetail>) => {
+    const latestState = latestFileDropState;
+    if (!latestState) {
+      return;
+    }
+    if (latestState.isChatAttachmentSubmitCaptureActive()) {
+      return;
+    }
+    // start 事件发生在异步读文件前，这里冻结 drop 当刻的会话/模型上下文。
+    registerDropAttachmentPending(
+      pendingFileDrops,
+      e.detail?.dropId,
+      buildCurrentDropAttachmentContext(latestState),
+      (pending) => latestState.trackChatAttachmentPending(pending),
+    );
+  }) as EventListener);
+  window.addEventListener("oneclaw:file-drop", ((e: CustomEvent<FileDropCompleteDetail>) => {
+    const latestState = latestFileDropState;
+    if (!latestState) {
+      return;
+    }
+    const hadPendingDrop = Boolean(e.detail?.dropId && pendingFileDrops.has(e.detail.dropId));
+    if (latestState.isChatAttachmentSubmitCaptureActive() && !hadPendingDrop) {
+      return;
+    }
+    const dropContext = takeDropAttachmentPending(
+      pendingFileDrops,
+      e.detail?.dropId,
+      buildCurrentDropAttachmentContext(latestState),
+    );
+    try {
+      const normalized = normalizeAttachmentCandidates(e.detail, dropContext.supportsImages);
+      if (normalized.rejectedImageCount > 0) {
+        reportUnsupportedImageAttachment(latestState, dropContext.contextKey);
+      }
+      appendChatAttachmentsIfContextCurrent(latestState, normalized.attachments, dropContext.contextKey);
+    } finally {
+      dropContext.settle();
+    }
   }) as EventListener);
 }
+
+// 每次渲染刷新 drop 回调使用的 state，避免闭包持有首次渲染时的旧模型和附件列表。
 function updateFileDropState(state: AppViewState) {
-  (window as any).__oneclawFileDropState?.update(state);
+  latestFileDropState = state;
 }
 
 export function renderApp(state: AppViewState) {
@@ -1563,6 +1665,12 @@ export function renderApp(state: AppViewState) {
   const skillsActive = oneclawView === "skills";
   const workspaceActive = oneclawView === "workspace";
   const cronActive = oneclawView === "cron";
+  const modelChangePending = state.modelChangePendingSessionKey === state.sessionKey;
+  const supportsImageInput = !modelChangePending && currentModelSupportsImages(
+    state.configuredModels,
+    state.currentModel,
+  );
+  const attachmentContextKey = buildAttachmentContextKey(state);
   const feedbackActive = oneclawView === "feedback";
   const updateBannerState = state.updateBannerState;
 
@@ -1978,6 +2086,7 @@ export function renderApp(state: AppViewState) {
                   onDraftChange: (next) => (state.chatMessage = next),
                   configuredModels: state.configuredModels,
                   currentModel: state.currentModel,
+                  modelChangePending,
                   dirtyMeterSessions: state.dirtyMeterSessions,
                   onModelChange: (modelKey) => state.handleModelChange(modelKey),
                   thinkingToggleLevel: state.thinkingLevel,
@@ -1987,6 +2096,22 @@ export function renderApp(state: AppViewState) {
                   onThinkingLevelChange: (level: string) => state.handleThinkingLevelChange(level),
                   attachments: state.chatAttachments,
                   onAttachmentsChange: (next) => (state.chatAttachments = next),
+                  attachmentContextKey,
+                  canChangeAttachments: () => !state.isChatAttachmentSubmitCaptureActive(),
+                  onAttachmentsAppend: (additions, contextKey) => {
+                    appendChatAttachmentsIfContextCurrent(
+                      state,
+                      additions,
+                      contextKey ?? attachmentContextKey,
+                    );
+                  },
+                  onAttachmentPending: (pending) => {
+                    state.trackChatAttachmentPending(pending);
+                  },
+                  supportsImageInput,
+                  onUnsupportedImageAttachment: (contextKey) => {
+                    reportUnsupportedImageAttachment(state, contextKey);
+                  },
                   onSend: () => state.handleSendChat(),
                   canAbort: Boolean(state.chatRunId),
                   onAbort: () => void state.handleAbortChat(),

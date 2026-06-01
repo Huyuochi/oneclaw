@@ -1,5 +1,6 @@
 import type { GatewayBrowserClient } from "../gateway.ts";
 import type { ChatAttachment } from "../ui-types.ts";
+import { attachmentLooksLikeImage } from "../chat/attachment-capability.ts";
 import { extractText } from "../chat/message-extract.ts";
 import { debugLog } from "../debug.ts";
 import { generateUUID } from "../uuid.ts";
@@ -178,9 +179,11 @@ export async function sendChatMessage(
   if (!state.client || !state.connected) {
     return null;
   }
-  // 分离图片附件和文件路径附件
-  const imageAttachments = attachments?.filter((a) => a.dataUrl) ?? [];
-  const fileAttachments = attachments?.filter((a) => a.filePath && !a.dataUrl) ?? [];
+  // 分离附件时必须守住边界：只有 dataUrl 图片可发送，path-only 图片不能降级为普通文件路径。
+  const imageAttachments = attachments?.filter((a) => a.dataUrl && attachmentLooksLikeImage(a)) ?? [];
+  const fileAttachments = attachments?.filter((a) => (
+    a.filePath && !a.dataUrl && !attachmentLooksLikeImage(a)
+  )) ?? [];
   const hasImages = imageAttachments.length > 0;
   const hasFiles = fileAttachments.length > 0;
 

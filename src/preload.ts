@@ -1,5 +1,104 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 
+type AttachmentCandidate = {
+  name?: string;
+  filePath?: string;
+  dataUrl?: string;
+  mimeType?: string;
+};
+
+type AttachmentCandidateResult = {
+  attachments: AttachmentCandidate[];
+  rejectedImageCount: number;
+  dropId?: string;
+};
+
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".bmp": "image/bmp",
+};
+
+function extnameLower(value: string): string {
+  const cleanValue = value.split(/[?#]/, 1)[0] ?? value;
+  const dotIndex = cleanValue.lastIndexOf(".");
+  return dotIndex >= 0 ? cleanValue.slice(dotIndex).toLowerCase() : "";
+}
+
+function fileNameFromPath(value: string): string {
+  return value.split(/[/\\]/).pop() || value;
+}
+
+function createDropId(): string {
+  return `drop-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function imageMimeTypeForName(value: string): string | null {
+  return IMAGE_MIME_BY_EXT[extnameLower(value)] ?? null;
+}
+
+function fileLooksLikeImage(file: File, filePath: string): boolean {
+  return file.type.startsWith("image/") || Boolean(imageMimeTypeForName(filePath || file.name));
+}
+
+function readDroppedImageDataUrl(file: File, filePath: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.addEventListener("error", () => resolve(null));
+    reader.addEventListener("load", () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      const match = /^data:[^;]*;base64,(.+)$/i.exec(result);
+      const mimeType = file.type.startsWith("image/")
+        ? file.type
+        : imageMimeTypeForName(filePath || file.name);
+      resolve(match && mimeType ? `data:${mimeType};base64,${match[1]}` : null);
+    });
+    reader.readAsDataURL(file);
+  });
+}
+
+async function buildDroppedAttachmentResult(files: FileList): Promise<AttachmentCandidateResult> {
+  // drop 是唯一不经过主进程 picker/clipboard 的文件入口；图片只从本次拖入的 File 对象读，
+  // 读取失败不回退成 path-only 图片，避免重新引入“按路径读图片”的边界。
+  const attachments: AttachmentCandidate[] = [];
+  let rejectedImageCount = 0;
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (!file) {
+      continue;
+    }
+    let filePath = "";
+    try {
+      filePath = webUtils.getPathForFile(file);
+    } catch {
+      filePath = "";
+    }
+    const name = file.name || fileNameFromPath(filePath);
+    if (fileLooksLikeImage(file, filePath)) {
+      const dataUrl = await readDroppedImageDataUrl(file, filePath);
+      if (dataUrl) {
+        attachments.push({
+          name,
+          dataUrl,
+          mimeType: file.type.startsWith("image/")
+            ? file.type
+            : imageMimeTypeForName(filePath || name) ?? undefined,
+        });
+      } else {
+        rejectedImageCount++;
+      }
+      continue;
+    }
+    if (filePath) {
+      attachments.push({ name, filePath });
+    }
+  }
+  return { attachments, rejectedImageCount };
+}
+
 // 安全桥接 — 向渲染进程暴露有限 API
 contextBridge.exposeInMainWorld("oneclaw", {
   // Gateway 控制
@@ -177,11 +276,14 @@ contextBridge.exposeInMainWorld("oneclaw", {
   openPath: (path: string) => ipcRenderer.invoke("app:open-path", path),
 
   // 文件选择
-  selectFiles: (options?: { filters?: Array<{ name: string; extensions: string[] }> }) =>
-    ipcRenderer.invoke("dialog:select-files", options) as Promise<string[]>,
-  // 读取剪贴板中的文件路径（Cmd+C / Ctrl+C 复制的文件）
-  readClipboardFilePaths: () =>
-    ipcRenderer.invoke("clipboard:read-file-paths") as Promise<string[]>,
+  selectFileAttachments: (
+    options?: { filters?: Array<{ name: string; extensions: string[] }>; allowImages?: boolean },
+  ) => ipcRenderer.invoke("dialog:select-file-attachments", options) as Promise<AttachmentCandidateResult>,
+  readClipboardFileAttachments: (options?: { allowImages?: boolean }) =>
+    ipcRenderer.invoke("clipboard:read-file-attachments", options) as Promise<AttachmentCandidateResult>,
+  // 读取系统剪贴板位图，补齐 DOM paste 拿不到图片项的场景。
+  readClipboardImage: () =>
+    ipcRenderer.invoke("clipboard:read-image-data-url") as Promise<string | null>,
 
   // Release Notes
   getReleaseNotes: () => ipcRenderer.invoke("app:get-release-notes"),
@@ -295,14 +397,18 @@ document.addEventListener("drop", (e) => {
   e.stopPropagation();
   const files = e.dataTransfer?.files;
   if (!files?.length) return;
-  const paths: string[] = [];
-  for (let i = 0; i < files.length; i++) {
-    try {
-      const p = webUtils.getPathForFile(files[i]);
-      if (p) paths.push(p);
-    } catch { /* 忽略无法获取路径的文件 */ }
-  }
-  if (paths.length > 0) {
-    window.dispatchEvent(new CustomEvent("oneclaw:file-drop", { detail: { paths } }));
-  }
+  const dropId = createDropId();
+  // 先同步通知 renderer 登记 pending，避免大图读取期间立即发送漏掉附件。
+  window.dispatchEvent(new CustomEvent("oneclaw:file-drop-start", { detail: { dropId } }));
+  void buildDroppedAttachmentResult(files)
+    .then((detail) => {
+      window.dispatchEvent(new CustomEvent("oneclaw:file-drop", {
+        detail: { ...detail, dropId },
+      }));
+    })
+    .catch(() => {
+      window.dispatchEvent(new CustomEvent("oneclaw:file-drop", {
+        detail: { attachments: [], rejectedImageCount: 0, dropId },
+      }));
+    });
 });

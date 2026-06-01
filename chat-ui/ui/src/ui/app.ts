@@ -83,6 +83,7 @@ import { resolveInjectedAssistantIdentity } from "./assistant-identity.ts";
 import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./controllers/assistant-identity.ts";
 import { markSessionMeterDirty } from "./context-meter.ts";
 import { getLocale, t } from "./i18n.ts";
+import { commitResolvedSessionModelPatch, syncCurrentModelFromActiveSession } from "./session-transition.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
 import { type ChatAttachment, type ChatQueueItem, type ConfiguredModel, type CronFormState } from "./ui-types.ts";
 
@@ -120,6 +121,11 @@ type OneClawUpdateState = {
   version: string | null;
   percent: number | null;
   showBadge: boolean;
+};
+
+type ChatAttachmentSubmitCapture = {
+  contextKey: string;
+  attachments: ChatAttachment[];
 };
 
 type ReleaseNotesData = {
@@ -210,8 +216,10 @@ export class OpenClawApp extends LitElement {
     chatThinkingLevel: { state: true },
     chatQueue: { state: true },
     chatAttachments: { state: true },
+    chatAttachmentContextGeneration: { state: true },
     configuredModels: { state: true },
     currentModel: { state: true },
+    modelChangePendingSessionKey: { state: true },
     dirtyMeterSessions: { state: true },
     thinkingLevel: { state: true },
     thinkingLevels: { state: true },
@@ -448,8 +456,13 @@ export class OpenClawApp extends LitElement {
   chatThinkingLevel: string | null = null;
   chatQueue: ChatQueueItem[] = [];
   chatAttachments: ChatAttachment[] = [];
+  chatAttachmentContextGeneration = 0;
+  private chatAttachmentPending = new Set<Promise<void>>();
+  private chatAttachmentSubmitCapture: ChatAttachmentSubmitCapture | null = null;
   configuredModels: ConfiguredModel[] = [];
   currentModel: string | null = null;
+  modelChangePendingSessionKey: string | null = null;
+  private modelChangeRequestSeq = 0;
   dirtyMeterSessions: Set<string> = new Set();
   meterTotalsBaseline: Map<string, number> = new Map();
   thinkingLevel: string = "off";
@@ -1038,6 +1051,60 @@ export class OpenClawApp extends LitElement {
     await handleAbortChatInternal(this as unknown as Parameters<typeof handleAbortChatInternal>[0]);
   }
 
+  // 跟踪进行中的附件读取（粘贴/拖拽图片转 dataUrl 是异步的）；发送前会 await 这些 promise，
+  // 避免粘贴后立刻回车把还没读完的图片漏发。每个 promise settle 后从 Set 中自我清理。
+  trackChatAttachmentPending(pending: Promise<void>) {
+    const tracked = Promise.resolve(pending)
+      .catch(() => {})
+      .finally(() => {
+        this.chatAttachmentPending.delete(tracked);
+      });
+    this.chatAttachmentPending.add(tracked);
+  }
+
+  chatAttachmentContextKey() {
+    return `${this.sessionKey}\0${this.currentModel ?? ""}\0${this.chatAttachmentContextGeneration}`;
+  }
+
+  beginChatAttachmentSubmitCapture() {
+    const capture: ChatAttachmentSubmitCapture = {
+      contextKey: this.chatAttachmentContextKey(),
+      attachments: this.chatAttachments.map((att) => ({ ...att })),
+    };
+    this.chatAttachmentSubmitCapture = capture;
+    this.chatAttachmentContextGeneration += 1;
+    return {
+      attachments: capture.attachments,
+      release: () => {
+        if (this.chatAttachmentSubmitCapture === capture) {
+          this.chatAttachmentSubmitCapture = null;
+          this.requestUpdate();
+        }
+      },
+    };
+  }
+
+  isChatAttachmentSubmitCaptureActive() {
+    return this.chatAttachmentSubmitCapture !== null;
+  }
+
+  captureChatAttachmentAdditions(additions: readonly ChatAttachment[], contextKey?: string) {
+    const capture = this.chatAttachmentSubmitCapture;
+    if (!capture || contextKey !== capture.contextKey || additions.length === 0) {
+      return false;
+    }
+    // 旧粘贴/拖拽的 FileReader 可能在 Enter 后才完成；保持其归属为本次提交，不回写 live composer。
+    capture.attachments.push(...additions.map((att) => ({ ...att })));
+    return true;
+  }
+
+  // 循环等待：await 期间可能又有新的附件读取入队，直到 Set 清空才返回。
+  async waitForChatAttachmentPending() {
+    while (this.chatAttachmentPending.size > 0) {
+      await Promise.allSettled([...this.chatAttachmentPending]);
+    }
+  }
+
   removeQueuedMessage(id: string) {
     removeQueuedMessageInternal(
       this as unknown as Parameters<typeof removeQueuedMessageInternal>[0],
@@ -1061,18 +1128,26 @@ export class OpenClawApp extends LitElement {
         const defaultModel = this.configuredModels.find((m) => m.isDefault);
         this.currentModel = defaultModel?.key ?? this.configuredModels[0].key;
       }
+      syncCurrentModelFromActiveSession(this);
       this.updateThinkingCapabilities();
     } catch {
       this.configuredModels = [];
     }
   }
 
-  // 切换当前 session 的模型（通过 sessions.patch RPC）
+  // 切换当前 session 的模型（通过 sessions.patch RPC）。
+  // 用自增 modelChangeRequestSeq 标记每次请求，只有最新一次（isLatestRequest）才允许写回 UI 状态，
+  // 避免快速连点时旧请求的成功/失败回调覆盖更晚的选择。本地先乐观更新 currentModel，
+  // patch 失败再回滚到 previousModel，并在期间用 modelChangePendingSessionKey 标记“切换进行中”以禁用选择器与图片门控。
   async handleModelChange(modelKey: string) {
-    this.currentModel = modelKey;
+    const previousModel = this.currentModel;
     if (!this.client || !this.connected) {
       return;
     }
+    const requestSeq = ++this.modelChangeRequestSeq;
+    const isLatestRequest = () => requestSeq === this.modelChangeRequestSeq;
+    this.currentModel = modelKey;
+    this.modelChangePendingSessionKey = this.sessionKey;
     // 切完模型先冻结 context meter；下一轮 usage 落库（totalTokens 单调推进）后由
     // app-gateway 的 usage 刷新清除。重新赋值以触发 Lit reactive 更新。
     const sessionKey = this.sessionKey;
@@ -1088,8 +1163,28 @@ export class OpenClawApp extends LitElement {
         key: sessionKey,
         model: modelKey,
       });
+      if (isLatestRequest() && this.sessionsResult) {
+        this.sessionsResult = {
+          ...this.sessionsResult,
+          sessions: this.sessionsResult.sessions.map((row) =>
+            row.key === sessionKey ? { ...row, model: modelKey } : row,
+          ),
+        };
+      }
+      if (isLatestRequest()) {
+        commitResolvedSessionModelPatch(this, sessionKey, modelKey);
+      }
     } catch (err) {
-      this.lastError = String(err);
+      if (isLatestRequest() && this.sessionKey === sessionKey) {
+        this.currentModel = previousModel;
+      }
+      if (isLatestRequest()) {
+        this.lastError = String(err);
+      }
+    } finally {
+      if (isLatestRequest() && this.modelChangePendingSessionKey === sessionKey) {
+        this.modelChangePendingSessionKey = null;
+      }
     }
     this.updateThinkingCapabilities();
   }

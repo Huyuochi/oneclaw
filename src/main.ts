@@ -43,6 +43,8 @@ import { importOpenclawStateFromArchive, validateOpenclawStateArchive } from "./
 import { syncOpenClawStateAfterWrite } from "./openclaw-health-state";
 import { createOpenclawStateImportLifecycle } from "./openclaw-state-import-lifecycle";
 import { reconcileHostStateAfterOpenclawImport } from "./openclaw-state-import-host-reconcile";
+import { buildFileAttachmentResult } from "./image-attachment-candidates";
+import { readClipboardImageDataUrlWithRetry } from "./clipboard-image";
 import * as log from "./logger";
 import * as analytics from "./analytics";
 
@@ -641,23 +643,11 @@ ipcMain.handle("app:download-and-install-update", () => downloadAndInstallUpdate
 ipcMain.handle("app:open-external", (_e, url: string) => shell.openExternal(appendChannelUtm(url)));
 ipcMain.handle("app:open-path", (_e, filePath: string) => shell.openPath(filePath));
 
-// 文件选择对话框 — 返回文件绝对路径数组
-ipcMain.handle("dialog:select-files", async (_e, options?: { filters?: Electron.FileFilter[] }) => {
-  const win = BrowserWindow.getFocusedWindow();
-  const result = await dialog.showOpenDialog(win ?? {
-    // fallback: 无聚焦窗口时仍可弹出
-  } as any, {
-    properties: ["openFile", "multiSelections"],
-    filters: options?.filters,
-  });
-  if (result.canceled) {
-    return [];
-  }
-  return result.filePaths;
-});
+function shouldReadImageAttachments(options?: { allowImages?: unknown }): boolean {
+  return options?.allowImages !== false;
+}
 
-// 读取剪贴板中的文件路径（macOS: NSFilenamesPboardType, Windows: CF_HDROP）
-ipcMain.handle("clipboard:read-file-paths", () => {
+async function readClipboardAttachmentFilePaths(): Promise<string[]> {
   try {
     if (process.platform === "darwin") {
       // macOS 剪贴板文件列表是 XML plist 格式
@@ -665,7 +655,6 @@ ipcMain.handle("clipboard:read-file-paths", () => {
       if (!buf?.length) return [];
       const xml = buf.toString("utf-8");
       const paths: string[] = [];
-      // 简单解析 <string>...</string> 标签提取路径
       const re = /<string>(.*?)<\/string>/g;
       let m: RegExpExecArray | null;
       while ((m = re.exec(xml)) !== null) {
@@ -676,7 +665,6 @@ ipcMain.handle("clipboard:read-file-paths", () => {
     if (process.platform === "win32") {
       const buf = clipboard.readBuffer("FileNameW");
       if (!buf?.length) return [];
-      // Windows FileNameW 是 UTF-16LE 以 null 结尾的路径
       const raw = buf.toString("utf16le").replace(/\0+$/, "");
       return raw ? [raw] : [];
     }
@@ -684,6 +672,49 @@ ipcMain.handle("clipboard:read-file-paths", () => {
   } catch {
     return [];
   }
+}
+
+// 文件选择器直接产出附件候选；图片读取只绑定到本次系统 picker 结果，不接受 renderer 提供路径。
+ipcMain.handle("dialog:select-file-attachments", async (
+  _e,
+  options?: { filters?: Electron.FileFilter[]; allowImages?: boolean },
+) => {
+  const win = BrowserWindow.getFocusedWindow();
+  const result = await dialog.showOpenDialog(win ?? {
+    // fallback: 无聚焦窗口时仍可弹出
+  } as any, {
+    properties: ["openFile", "multiSelections"],
+    filters: options?.filters,
+  });
+  if (result.canceled) {
+    return { attachments: [], rejectedImageCount: 0 };
+  }
+  return buildFileAttachmentResult(result.filePaths, {
+    allowImages: shouldReadImageAttachments(options),
+  });
+});
+
+// 当前剪贴板文件列表直接产出附件候选；图片读取只绑定到用户复制到剪贴板的文件。
+ipcMain.handle("clipboard:read-file-attachments", async (_e, options?: { allowImages?: boolean }) => {
+  const filePaths = await readClipboardAttachmentFilePaths();
+  return buildFileAttachmentResult(filePaths, {
+    allowImages: shouldReadImageAttachments(options),
+  });
+});
+
+// DOM 剪贴板拿不到图片文件时的兜底通道，把系统剪贴板位图转成渲染层可直接使用的 data URL。
+ipcMain.handle("clipboard:read-image-data-url", async () => {
+  return readClipboardImageDataUrlWithRetry(() => {
+    try {
+      const image = clipboard.readImage();
+      if (image.isEmpty()) {
+        return null;
+      }
+      return `data:image/png;base64,${image.toPNG().toString("base64")}`;
+    } catch {
+      return null;
+    }
+  });
 });
 
 // ── Release Notes：读取打包的 changelog 并按版本过滤 ──
