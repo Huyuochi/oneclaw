@@ -3,7 +3,19 @@ import { ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
 import type { GatewaySessionRow, SessionsListResult } from "../types.ts";
 import type { ChatItem, MessageGroup } from "../types/chat-types.ts";
-import type { ChatAttachment, ChatQueueItem, ConfiguredModel } from "../ui-types.ts";
+import type {
+  ChatAttachment,
+  ChatAttachmentCandidateResult,
+  ChatQueueItem,
+  ConfiguredModel,
+} from "../ui-types.ts";
+import {
+  attachmentPreviewUrl,
+  createAttachmentId,
+  fileNameFromPath,
+  mimeTypeFromDataUrl,
+  normalizeAttachmentCandidates,
+} from "../chat/attachment-capability.ts";
 import {
   renderMessageGroup,
   renderReadingIndicatorGroup,
@@ -60,6 +72,7 @@ export type ChatProps = {
   // 模型选择器
   configuredModels?: ConfiguredModel[];
   currentModel?: string | null;
+  modelChangePending?: boolean;
   dirtyMeterSessions?: ReadonlySet<string>;
   onModelChange?: (modelKey: string) => void;
   // 思考开关
@@ -71,6 +84,12 @@ export type ChatProps = {
   // Image attachments
   attachments?: ChatAttachment[];
   onAttachmentsChange?: (attachments: ChatAttachment[]) => void;
+  attachmentContextKey?: string;
+  onAttachmentsAppend?: (attachments: ChatAttachment[], contextKey?: string) => void;
+  onAttachmentPending?: (pending: Promise<void>) => void;
+  canChangeAttachments?: () => boolean;
+  supportsImageInput?: boolean;
+  onUnsupportedImageAttachment?: (contextKey?: string) => void;
   // Scroll control
   showNewMessages?: boolean;
   onScrollToBottom?: () => void;
@@ -184,64 +203,243 @@ function renderCompactionIndicator(status: CompactionIndicatorStatus | null | un
   return nothing;
 }
 
-function generateAttachmentId(): string {
-  return `att-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+type OneclawFileBridge = {
+  readClipboardFileAttachments?: (
+    options?: { allowImages?: boolean },
+  ) => Promise<ChatAttachmentCandidateResult>;
+  readClipboardImage?: () => Promise<string | null>;
+  selectFileAttachments?: (
+    options?: { filters?: Array<{ name: string; extensions: string[] }>; allowImages?: boolean },
+  ) => Promise<ChatAttachmentCandidateResult>;
+};
+
+// 集中收窄 window.oneclaw 类型，避免粘贴、附件按钮等入口重复做 unsafe cast。
+function oneclawFileBridge(): OneclawFileBridge | undefined {
+  return (window as { oneclaw?: unknown }).oneclaw as OneclawFileBridge | undefined;
 }
 
+function appendAttachments(additions: ChatAttachment[], props: ChatProps, contextKey?: string) {
+  if (!additions.length) {
+    return;
+  }
+  if (props.onAttachmentsAppend) {
+    props.onAttachmentsAppend(additions, contextKey);
+    return;
+  }
+  const current = props.attachments ?? [];
+  props.onAttachmentsChange?.([...current, ...additions]);
+}
+
+function trackAttachmentPending(props: ChatProps, pending: Promise<void>) {
+  props.onAttachmentPending?.(pending);
+}
+
+function canChangeAttachments(props: ChatProps): boolean {
+  return props.canChangeAttachments?.() !== false;
+}
+
+// 附件按钮和文件粘贴共用入口；只接收用户入口产出的候选，path-only 图片在这里被拒绝。
+function addAttachmentCandidates(result: ChatAttachmentCandidateResult, props: ChatProps, contextKey?: string) {
+  if (!props.onAttachmentsChange) return;
+  const normalized = normalizeAttachmentCandidates(
+    result,
+    props.supportsImageInput === true,
+  );
+  if (normalized.rejectedImageCount > 0) {
+    props.onUnsupportedImageAttachment?.(contextKey);
+  }
+  appendAttachments(normalized.attachments, props, contextKey);
+}
+
+function requestFileAttachments(props: ChatProps) {
+  if (!canChangeAttachments(props)) {
+    return;
+  }
+  const contextKey = props.attachmentContextKey;
+  const bridge = oneclawFileBridge();
+  if (!bridge?.selectFileAttachments) {
+    return;
+  }
+  const pending = bridge.selectFileAttachments({ allowImages: props.supportsImageInput === true }).then((result) => {
+    addAttachmentCandidates(result, props, contextKey);
+  }).catch(() => {});
+  trackAttachmentPending(props, pending);
+}
+
+// 将无文件路径的剪贴板图片追加为 dataUrl 附件，确保复制粘贴的图片不会被发送框吞掉。
+function appendImageDataUrl(dataUrl: string, props: ChatProps, contextKey?: string) {
+  appendAttachments([{
+    id: createAttachmentId(),
+    dataUrl,
+    mimeType: mimeTypeFromDataUrl(dataUrl) ?? "image/png",
+  }], props, contextKey);
+}
+
+// 处理 Electron 原生剪贴板图片兜底；有些应用粘贴图片时 DOM items 为空，只能从主进程读。
+// 必须先读剪贴板确认确实有图片，再按模型能力提示：否则纯文本模型下空粘贴/非图片粘贴会误报“不支持图片”。
+async function addNativeClipboardImage(bridge: OneclawFileBridge, props: ChatProps): Promise<void> {
+  const readClipboardImage = bridge.readClipboardImage;
+  if (!readClipboardImage) {
+    return;
+  }
+  const contextKey = props.attachmentContextKey;
+  const dataUrl = await readClipboardImage().catch(() => null);
+  if (!dataUrl) {
+    return;
+  }
+  if (props.supportsImageInput !== true) {
+    props.onUnsupportedImageAttachment?.(contextKey);
+    return;
+  }
+  appendImageDataUrl(dataUrl, props, contextKey);
+}
+
+// 把单个剪贴板图片项异步读成 dataUrl 附件；FileReader 是回调式，包成 Promise 便于与其它入口一起被发送前 await。
+function appendDataTransferImageItem(
+  item: DataTransferItem,
+  props: ChatProps,
+  contextKey?: string,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const file = item.getAsFile();
+    if (!file) {
+      resolve(false);
+      return;
+    }
+    const reader = new FileReader();
+    reader.addEventListener("error", () => resolve(false));
+    reader.addEventListener("load", () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+      if (dataUrl) {
+        appendAttachments([{
+          id: createAttachmentId(),
+          dataUrl,
+          mimeType: file.type,
+        }], props, contextKey);
+        resolve(true);
+        return;
+      }
+      resolve(false);
+    });
+    reader.readAsDataURL(file);
+  });
+}
+
+async function appendDataTransferImageItems(
+  imageItems: DataTransferItem[],
+  props: ChatProps,
+  contextKey?: string,
+): Promise<boolean> {
+  if (imageItems.length === 0) {
+    return false;
+  }
+  const results = await Promise.all(
+    imageItems.map((item) => appendDataTransferImageItem(item, props, contextKey)),
+  );
+  return results.some(Boolean);
+}
+
+// 判断这次粘贴是否携带文件：DOM 有 file 类型条目，或剪贴板类型里出现 files / uri-list /
+// file-url / x-moz-file 等跨平台文件标识（不同系统与应用暴露的类型名不一致，需逐一覆盖）。
+function clipboardLooksLikeFilePaste(itemList: DataTransferItem[], clipboardTypes: string[]): boolean {
+  return itemList.some((item) => item.kind === "file") ||
+    clipboardTypes.some((type) => {
+      const normalized = type.toLowerCase();
+      return normalized === "files" ||
+        normalized === "text/uri-list" ||
+        normalized.includes("file-url") ||
+        normalized.includes("x-moz-file");
+    });
+}
+
+// 统一处理 DOM 粘贴和原生剪贴板兜底，必须同步 preventDefault 才能避免浏览器吞掉图片。
 function handlePaste(e: ClipboardEvent, props: ChatProps) {
+  // 判定顺序很关键：图片/文件粘贴必须拦截默认行为，普通文本粘贴必须完全交还浏览器。
   if (!props.onAttachmentsChange) return;
 
   // 图片粘贴：走 dataUrl 内嵌
   const items = e.clipboardData?.items;
-  if (items) {
-    const imageItems: DataTransferItem[] = [];
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.startsWith("image/")) imageItems.push(items[i]);
-    }
+  const itemList: DataTransferItem[] = items
+    ? Array.from({ length: items.length }, (_, i) => items[i])
+        .filter((item): item is DataTransferItem => Boolean(item))
+    : [];
+  const clipboardTypes = e.clipboardData?.types ? Array.from(e.clipboardData.types) : [];
+  const imageItems = itemList.filter((item) => item.type.startsWith("image/"));
+
+  // 文件粘贴（含资源管理器/Finder 复制的图片文件）：一律交主进程从磁盘真实路径读取。
+  // Windows 上渲染层 File 的字节读不出来（getAsFile/arrayBuffer 失败或为空），而主进程能经
+  // FileNameW/NSFilenames 拿到路径并 fs 读取，截图等内存位图再由 readImage() 兜底；
+  // 故文件粘贴不走下面的渲染层内存读取分支，直接落到主进程文件分支。
+  const hasRealFileItems = itemList.some((item) => item.kind === "file");
+  const hasTextItems =
+    itemList.some((item) => item.kind === "string" && item.type.startsWith("text/")) ||
+    clipboardTypes.some((type) => type.startsWith("text/"));
+  // 真实文件条目（kind:"file"）一定是文件粘贴；仅凭 files/uri-list/file-url 等类型判定时，
+  // 若同时携带文本（复制超链接会同时给出 text/plain + text/uri-list），则优先当文本交还
+  // 浏览器，避免把 URL/超链接误判为文件而被静默吞掉。
+  const hasFileItems = hasRealFileItems ||
+    (!hasTextItems && clipboardLooksLikeFilePaste(itemList, clipboardTypes));
+
+  // 纯内存图片（非文件粘贴，如部分应用的“复制图片”）才在渲染层读 DOM image 条目。
+  if (!hasFileItems) {
     if (imageItems.length > 0) {
       e.preventDefault();
-      for (const item of imageItems) {
-        const file = item.getAsFile();
-        if (!file) continue;
-        const reader = new FileReader();
-        reader.addEventListener("load", () => {
-          const dataUrl = reader.result as string;
-          const current = props.attachments ?? [];
-          props.onAttachmentsChange?.([...current, {
-            id: generateAttachmentId(), dataUrl, mimeType: file.type,
-          }]);
-        });
-        reader.readAsDataURL(file);
+      if (!canChangeAttachments(props)) {
+        return;
       }
+      if (props.supportsImageInput !== true) {
+        props.onUnsupportedImageAttachment?.(props.attachmentContextKey);
+        return;
+      }
+      const contextKey = props.attachmentContextKey;
+      const pending = appendDataTransferImageItems(imageItems, props, contextKey).then(() => {});
+      trackAttachmentPending(props, pending);
       return;
     }
   }
 
-  // 文件粘贴：从剪贴板读取文件路径（Cmd+C / Ctrl+C 复制的文件）
-  // IPC 是异步的，但 preventDefault 必须同步调用——先检查剪贴板是否含文件条目
-  const hasFileItems = items && Array.from({ length: items.length }, (_, i) => items[i])
-    .some((item) => item.kind === "file");
-  if (!hasFileItems) return;
+  // 非文件粘贴：有文本就完全交还浏览器（含超链接/URL）；否则尝试主进程读内存位图（部分应用“复制图片”）。
+  if (!hasFileItems) {
+    if (hasTextItems) {
+      return;
+    }
+    const bridge = oneclawFileBridge();
+    if (!bridge?.readClipboardImage) {
+      return;
+    }
+    e.preventDefault();
+    if (!canChangeAttachments(props)) {
+      return;
+    }
+    trackAttachmentPending(props, addNativeClipboardImage(bridge, props));
+    return;
+  }
   e.preventDefault();
-  const w = window as Record<string, unknown>;
-  const oneclaw = w.oneclaw as Record<string, (...args: unknown[]) => Promise<string[]>> | undefined;
-  if (!oneclaw?.readClipboardFilePaths) return;
-  oneclaw.readClipboardFilePaths().then((paths: string[]) => {
-    if (!paths?.length) return;
-    const current = props.attachments ?? [];
-    const additions = paths.map((p: string) => ({
-      id: generateAttachmentId(), filePath: p, name: basename(p),
-    }));
-    props.onAttachmentsChange?.([...current, ...additions]);
-  });
+  if (!canChangeAttachments(props)) {
+    return;
+  }
+  const bridge = oneclawFileBridge();
+  if (!bridge?.readClipboardFileAttachments) return;
+  const contextKey = props.attachmentContextKey;
+  const pending = bridge.readClipboardFileAttachments({ allowImages: props.supportsImageInput === true }).then(async (result) => {
+    if (!result?.attachments?.length && !result?.rejectedImageCount) {
+      if (imageItems.length > 0) {
+        if (props.supportsImageInput !== true) {
+          props.onUnsupportedImageAttachment?.(contextKey);
+          return;
+        }
+        if (await appendDataTransferImageItems(imageItems, props, contextKey)) {
+          return;
+        }
+      }
+      return addNativeClipboardImage(bridge, props);
+    }
+    addAttachmentCandidates(result, props, contextKey);
+  }).catch(() => {});
+  trackAttachmentPending(props, pending);
 }
 
-// 从路径提取文件名
-function basename(path: string): string {
-  const sep = path.includes("\\") ? "\\" : "/";
-  return path.split(sep).pop() || path;
-}
-
+// 渲染附件预览时复用统一判断，让粘贴、拖拽、附件按钮的图片/文件展示保持一致。
 function renderAttachmentPreview(props: ChatProps) {
   const attachments = props.attachments ?? [];
   if (attachments.length === 0) {
@@ -251,18 +449,20 @@ function renderAttachmentPreview(props: ChatProps) {
   return html`
     <div class="chat-attachments">
       ${attachments.map(
-        (att) => html`
-          <div class="chat-attachment ${att.filePath && !att.dataUrl ? "chat-attachment--file" : ""}">
+        (att) => {
+          const previewUrl = attachmentPreviewUrl(att);
+          return html`
+          <div class="chat-attachment ${att.filePath && !previewUrl ? "chat-attachment--file" : ""}">
             ${
-              att.dataUrl
+              previewUrl
                 ? html`<img
-                    src=${att.dataUrl}
+                    src=${previewUrl}
                     alt=${t("chat.attachmentPreview")}
                     class="chat-attachment__img"
                   />`
                 : html`<div class="chat-attachment__file">
                     <span class="chat-attachment__file-icon">${icons.fileText}</span>
-                    <span class="chat-attachment__file-name">${att.name || basename(att.filePath ?? "")}</span>
+                    <span class="chat-attachment__file-name">${att.name || fileNameFromPath(att.filePath ?? "")}</span>
                   </div>`
             }
             <button
@@ -277,7 +477,8 @@ function renderAttachmentPreview(props: ChatProps) {
               ${icons.x}
             </button>
           </div>
-        `,
+        `;
+        },
       )}
     </div>
   `;
@@ -524,26 +725,9 @@ export function renderChat(props: ChatProps) {
             <button
               class="chat-compose__tool-btn"
               type="button"
-              @click=${async () => {
-                const w = window as Record<string, unknown>;
-                const oneclaw = w.oneclaw as Record<string, (...args: unknown[]) => Promise<string[]>> | undefined;
-                if (!oneclaw?.selectFiles) {
-                  return;
-                }
-                const paths = await oneclaw.selectFiles();
-                if (!paths?.length) {
-                  return;
-                }
-                const current = props.attachments ?? [];
-                const additions = paths.map((p: string) => ({
-                  id: generateAttachmentId(),
-                  filePath: p,
-                  name: p.split(/[/\\]/).pop() || p,
-                }));
-                props.onAttachmentsChange?.([...current, ...additions]);
-              }}
+              @click=${() => requestFileAttachments(props)}
               data-tooltip=${t("chat.attachFile")}
-              ?disabled=${!props.connected}
+              ?disabled=${!props.connected || !canChangeAttachments(props)}
             >
               ${icons.paperclip}
             </button>
@@ -613,7 +797,7 @@ export function renderChat(props: ChatProps) {
                     const val = (e.target as HTMLSelectElement).value;
                     props.onModelChange?.(val);
                   }}
-                  ?disabled=${!props.connected}
+                  ?disabled=${!props.connected || props.modelChangePending === true}
                 >
                   ${props.configuredModels.map(m => html`
                     <option value=${m.key} ?selected=${m.key === props.currentModel}>
