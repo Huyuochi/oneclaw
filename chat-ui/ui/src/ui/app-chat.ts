@@ -33,12 +33,6 @@ export type ChatHost = {
   currentModel: string | null;
   modelChangePendingSessionKey: string | null;
   lastError: string | null;
-  waitForChatAttachmentPending?: () => Promise<void>;
-  beginChatAttachmentSubmitCapture?: () => {
-    attachments: ChatAttachment[];
-    release: () => void;
-  };
-  isChatAttachmentSubmitCaptureActive?: () => boolean;
 };
 
 
@@ -271,64 +265,14 @@ export async function handleSendChat(
   if (!host.connected) {
     return false;
   }
-  if (messageOverride == null && host.isChatAttachmentSubmitCaptureActive?.()) {
-    // 上一次提交仍在收拢旧附件时，第二次 Enter 先忽略，避免覆盖 active capture。
-    return false;
-  }
-  // 在按下 Enter 的瞬间快照提交上下文：目标会话与草稿文本。附件读取是异步的、必须 await，
-  // 但 await 期间用户可能切换会话或继续输入。用快照定型这次提交，避免把后续草稿一并发出、
-  // 或把这次 Enter 发到切换后的会话。
-  const submittedSessionKey = host.sessionKey;
-  const submittedDraft = host.chatMessage;
-  if (messageOverride == null && isChatStopCommand(submittedDraft)) {
-    await handleAbortChat(host);
-    return false;
-  }
-  const attachmentCapture =
-    messageOverride == null ? host.beginChatAttachmentSubmitCapture?.() ?? null : null;
-  const restoreSubmittedComposerIfUntouched = () => {
-    if (!attachmentCapture) {
-      return;
-    }
-    // Composer state is global to the active chat view; only restore into the session
-    // that owned this submit snapshot, never into a session selected while awaiting.
-    if (host.sessionKey !== submittedSessionKey) {
-      return;
-    }
-    if (host.chatMessage.length > 0 || (host.chatAttachments?.length ?? 0) > 0) {
-      return;
-    }
-    host.chatMessage = submittedDraft;
-    host.chatAttachments = attachmentCapture.attachments.map((att) => ({ ...att }));
-  };
-  if (messageOverride == null) {
-    if (attachmentCapture) {
-      // 提交快照接管旧附件后，立即释放 live composer，让用户输入下一条不会被 await 后的清理误伤。
-      host.chatMessage = "";
-      host.chatAttachments = [];
-    }
-    try {
-      await host.waitForChatAttachmentPending?.();
-    } finally {
-      attachmentCapture?.release();
-    }
-    // 等待期间会话被切走：这次 Enter 的草稿/附件属于旧会话，绝不能误发到当前会话。
-    // 不变量：这里到 sendChatMessage 实际读取 state.sessionKey 之间不能再有 await——
-    // 该守卫只在“守卫之后到 live 读取之间同步执行”的前提下成立。若未来在此区间插入 await，
-    // 需把会话快照透传给发送层，而非依赖此处的一次性比较。
-    if (host.sessionKey !== submittedSessionKey) {
-      return false;
-    }
-  }
-  const previousDraft = submittedDraft;
-  const message = (messageOverride ?? submittedDraft).trim();
-  const attachments = attachmentCapture?.attachments ?? host.chatAttachments ?? [];
+  const previousDraft = host.chatMessage;
+  const message = (messageOverride ?? host.chatMessage).trim();
+  const attachments = host.chatAttachments ?? [];
   const attachmentsToSend = messageOverride == null ? attachments : [];
   const hasAttachments = attachmentsToSend.length > 0;
 
   // Allow sending with just attachments (no message text required)
   if (!message && !hasAttachments) {
-    restoreSubmittedComposerIfUntouched();
     return false;
   }
 
@@ -337,14 +281,13 @@ export async function handleSendChat(
     return false;
   }
 
-  // 发送前最后兜底：即使某个上传入口漏过，纯文本模型也不能带图片附件发出。
+  // 发送前最后兜底：纯文本模型不能带图片附件发出。
   if (hasUnsupportedImageAttachments(host, attachmentsToSend)) {
     reportUnsupportedImageAttachment(host);
-    restoreSubmittedComposerIfUntouched();
     return false;
   }
 
-  if (messageOverride == null && !attachmentCapture) {
+  if (messageOverride == null) {
     host.chatMessage = "";
     // Clear attachments when sending
     host.chatAttachments = [];
@@ -356,15 +299,12 @@ export async function handleSendChat(
   }
 
   const ok = await sendChatMessageNow(host, message, {
-    previousDraft: messageOverride == null && !attachmentCapture ? previousDraft : undefined,
+    previousDraft: messageOverride == null ? previousDraft : undefined,
     restoreDraft: Boolean(messageOverride && opts?.restoreDraft),
     attachments: hasAttachments ? attachmentsToSend : undefined,
-    previousAttachments: messageOverride == null && !attachmentCapture ? attachments : undefined,
+    previousAttachments: messageOverride == null ? attachments : undefined,
     restoreAttachments: Boolean(messageOverride && opts?.restoreDraft),
   });
-  if (!ok) {
-    restoreSubmittedComposerIfUntouched();
-  }
   return ok;
 }
 

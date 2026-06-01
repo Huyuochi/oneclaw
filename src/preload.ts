@@ -10,7 +10,6 @@ type AttachmentCandidate = {
 type AttachmentCandidateResult = {
   attachments: AttachmentCandidate[];
   rejectedImageCount: number;
-  dropId?: string;
 };
 
 const IMAGE_MIME_BY_EXT: Record<string, string> = {
@@ -30,10 +29,6 @@ function extnameLower(value: string): string {
 
 function fileNameFromPath(value: string): string {
   return value.split(/[/\\]/).pop() || value;
-}
-
-function createDropId(): string {
-  return `drop-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function imageMimeTypeForName(value: string): string | null {
@@ -397,18 +392,17 @@ document.addEventListener("drop", (e) => {
   e.stopPropagation();
   const files = e.dataTransfer?.files;
   if (!files?.length) return;
-  const dropId = createDropId();
-  // 先同步通知 renderer 登记 pending，避免大图读取期间立即发送漏掉附件。
-  window.dispatchEvent(new CustomEvent("oneclaw:file-drop-start", { detail: { dropId } }));
+  // 设计取舍（已评估，可接受）：默认图片体积小、dataUrl 转换近乎瞬时，这里读到即追加 / 发送不等待，
+  // 不再跟踪 pending、不快照冻结 composer。已知边界：超大图片刚粘贴/拖入就立刻回车，该附件可能来不及
+  // 读完而漏发（仍可在下一次发送时带上）。这是为换取无竞态的简单路径主动接受的取舍，非缺陷，
+  // 也无需按“大图上传风险”加固。
   void buildDroppedAttachmentResult(files)
     .then((detail) => {
-      window.dispatchEvent(new CustomEvent("oneclaw:file-drop", {
-        detail: { ...detail, dropId },
-      }));
+      window.dispatchEvent(new CustomEvent("oneclaw:file-drop", { detail }));
     })
     .catch(() => {
       window.dispatchEvent(new CustomEvent("oneclaw:file-drop", {
-        detail: { attachments: [], rejectedImageCount: 0, dropId },
+        detail: { attachments: [], rejectedImageCount: 0 },
       }));
     });
 });

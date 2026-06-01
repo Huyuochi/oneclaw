@@ -123,11 +123,6 @@ type OneClawUpdateState = {
   showBadge: boolean;
 };
 
-type ChatAttachmentSubmitCapture = {
-  contextKey: string;
-  attachments: ChatAttachment[];
-};
-
 type ReleaseNotesData = {
   currentVersion: string;
   entries: Array<{ version: string; notes: { zh?: string; en?: string } }>;
@@ -216,7 +211,6 @@ export class OpenClawApp extends LitElement {
     chatThinkingLevel: { state: true },
     chatQueue: { state: true },
     chatAttachments: { state: true },
-    chatAttachmentContextGeneration: { state: true },
     configuredModels: { state: true },
     currentModel: { state: true },
     modelChangePendingSessionKey: { state: true },
@@ -456,9 +450,6 @@ export class OpenClawApp extends LitElement {
   chatThinkingLevel: string | null = null;
   chatQueue: ChatQueueItem[] = [];
   chatAttachments: ChatAttachment[] = [];
-  chatAttachmentContextGeneration = 0;
-  private chatAttachmentPending = new Set<Promise<void>>();
-  private chatAttachmentSubmitCapture: ChatAttachmentSubmitCapture | null = null;
   configuredModels: ConfiguredModel[] = [];
   currentModel: string | null = null;
   modelChangePendingSessionKey: string | null = null;
@@ -1049,60 +1040,6 @@ export class OpenClawApp extends LitElement {
 
   async handleAbortChat() {
     await handleAbortChatInternal(this as unknown as Parameters<typeof handleAbortChatInternal>[0]);
-  }
-
-  // 跟踪进行中的附件读取（粘贴/拖拽图片转 dataUrl 是异步的）；发送前会 await 这些 promise，
-  // 避免粘贴后立刻回车把还没读完的图片漏发。每个 promise settle 后从 Set 中自我清理。
-  trackChatAttachmentPending(pending: Promise<void>) {
-    const tracked = Promise.resolve(pending)
-      .catch(() => {})
-      .finally(() => {
-        this.chatAttachmentPending.delete(tracked);
-      });
-    this.chatAttachmentPending.add(tracked);
-  }
-
-  chatAttachmentContextKey() {
-    return `${this.sessionKey}\0${this.currentModel ?? ""}\0${this.chatAttachmentContextGeneration}`;
-  }
-
-  beginChatAttachmentSubmitCapture() {
-    const capture: ChatAttachmentSubmitCapture = {
-      contextKey: this.chatAttachmentContextKey(),
-      attachments: this.chatAttachments.map((att) => ({ ...att })),
-    };
-    this.chatAttachmentSubmitCapture = capture;
-    this.chatAttachmentContextGeneration += 1;
-    return {
-      attachments: capture.attachments,
-      release: () => {
-        if (this.chatAttachmentSubmitCapture === capture) {
-          this.chatAttachmentSubmitCapture = null;
-          this.requestUpdate();
-        }
-      },
-    };
-  }
-
-  isChatAttachmentSubmitCaptureActive() {
-    return this.chatAttachmentSubmitCapture !== null;
-  }
-
-  captureChatAttachmentAdditions(additions: readonly ChatAttachment[], contextKey?: string) {
-    const capture = this.chatAttachmentSubmitCapture;
-    if (!capture || contextKey !== capture.contextKey || additions.length === 0) {
-      return false;
-    }
-    // 旧粘贴/拖拽的 FileReader 可能在 Enter 后才完成；保持其归属为本次提交，不回写 live composer。
-    capture.attachments.push(...additions.map((att) => ({ ...att })));
-    return true;
-  }
-
-  // 循环等待：await 期间可能又有新的附件读取入队，直到 Set 清空才返回。
-  async waitForChatAttachmentPending() {
-    while (this.chatAttachmentPending.size > 0) {
-      await Promise.allSettled([...this.chatAttachmentPending]);
-    }
   }
 
   removeQueuedMessage(id: string) {

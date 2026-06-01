@@ -84,12 +84,8 @@ export type ChatProps = {
   // Image attachments
   attachments?: ChatAttachment[];
   onAttachmentsChange?: (attachments: ChatAttachment[]) => void;
-  attachmentContextKey?: string;
-  onAttachmentsAppend?: (attachments: ChatAttachment[], contextKey?: string) => void;
-  onAttachmentPending?: (pending: Promise<void>) => void;
-  canChangeAttachments?: () => boolean;
   supportsImageInput?: boolean;
-  onUnsupportedImageAttachment?: (contextKey?: string) => void;
+  onUnsupportedImageAttachment?: () => void;
   // Scroll control
   showNewMessages?: boolean;
   onScrollToBottom?: () => void;
@@ -218,61 +214,48 @@ function oneclawFileBridge(): OneclawFileBridge | undefined {
   return (window as { oneclaw?: unknown }).oneclaw as OneclawFileBridge | undefined;
 }
 
-function appendAttachments(additions: ChatAttachment[], props: ChatProps, contextKey?: string) {
+function appendAttachments(additions: ChatAttachment[], props: ChatProps) {
   if (!additions.length) {
-    return;
-  }
-  if (props.onAttachmentsAppend) {
-    props.onAttachmentsAppend(additions, contextKey);
     return;
   }
   const current = props.attachments ?? [];
   props.onAttachmentsChange?.([...current, ...additions]);
 }
 
-function trackAttachmentPending(props: ChatProps, pending: Promise<void>) {
-  props.onAttachmentPending?.(pending);
-}
-
-function canChangeAttachments(props: ChatProps): boolean {
-  return props.canChangeAttachments?.() !== false;
-}
-
 // 附件按钮和文件粘贴共用入口；只接收用户入口产出的候选，path-only 图片在这里被拒绝。
-function addAttachmentCandidates(result: ChatAttachmentCandidateResult, props: ChatProps, contextKey?: string) {
+function addAttachmentCandidates(result: ChatAttachmentCandidateResult, props: ChatProps) {
   if (!props.onAttachmentsChange) return;
   const normalized = normalizeAttachmentCandidates(
     result,
     props.supportsImageInput === true,
   );
   if (normalized.rejectedImageCount > 0) {
-    props.onUnsupportedImageAttachment?.(contextKey);
+    props.onUnsupportedImageAttachment?.();
   }
-  appendAttachments(normalized.attachments, props, contextKey);
+  appendAttachments(normalized.attachments, props);
 }
 
 function requestFileAttachments(props: ChatProps) {
-  if (!canChangeAttachments(props)) {
-    return;
-  }
-  const contextKey = props.attachmentContextKey;
   const bridge = oneclawFileBridge();
   if (!bridge?.selectFileAttachments) {
     return;
   }
-  const pending = bridge.selectFileAttachments({ allowImages: props.supportsImageInput === true }).then((result) => {
-    addAttachmentCandidates(result, props, contextKey);
+  // 设计取舍（已评估，可接受）：默认图片体积小、dataUrl 转换近乎瞬时，这里读到即追加 / 发送不等待，
+  // 不再跟踪 pending、不快照冻结 composer。已知边界：超大图片刚选择就立刻回车，该附件可能来不及
+  // 读完而漏发（仍可在下一次发送时带上）。这是为换取无竞态的简单路径主动接受的取舍，非缺陷，
+  // 也无需按“大图上传风险”加固。
+  void bridge.selectFileAttachments({ allowImages: props.supportsImageInput === true }).then((result) => {
+    addAttachmentCandidates(result, props);
   }).catch(() => {});
-  trackAttachmentPending(props, pending);
 }
 
 // 将无文件路径的剪贴板图片追加为 dataUrl 附件，确保复制粘贴的图片不会被发送框吞掉。
-function appendImageDataUrl(dataUrl: string, props: ChatProps, contextKey?: string) {
+function appendImageDataUrl(dataUrl: string, props: ChatProps) {
   appendAttachments([{
     id: createAttachmentId(),
     dataUrl,
     mimeType: mimeTypeFromDataUrl(dataUrl) ?? "image/png",
-  }], props, contextKey);
+  }], props);
 }
 
 // 处理 Electron 原生剪贴板图片兜底；有些应用粘贴图片时 DOM items 为空，只能从主进程读。
@@ -282,23 +265,21 @@ async function addNativeClipboardImage(bridge: OneclawFileBridge, props: ChatPro
   if (!readClipboardImage) {
     return;
   }
-  const contextKey = props.attachmentContextKey;
   const dataUrl = await readClipboardImage().catch(() => null);
   if (!dataUrl) {
     return;
   }
   if (props.supportsImageInput !== true) {
-    props.onUnsupportedImageAttachment?.(contextKey);
+    props.onUnsupportedImageAttachment?.();
     return;
   }
-  appendImageDataUrl(dataUrl, props, contextKey);
+  appendImageDataUrl(dataUrl, props);
 }
 
-// 把单个剪贴板图片项异步读成 dataUrl 附件；FileReader 是回调式，包成 Promise 便于与其它入口一起被发送前 await。
+// 把单个剪贴板图片项异步读成 dataUrl 附件；FileReader 是回调式，包成 Promise 与其它入口一致。
 function appendDataTransferImageItem(
   item: DataTransferItem,
   props: ChatProps,
-  contextKey?: string,
 ): Promise<boolean> {
   return new Promise((resolve) => {
     const file = item.getAsFile();
@@ -315,7 +296,7 @@ function appendDataTransferImageItem(
           id: createAttachmentId(),
           dataUrl,
           mimeType: file.type,
-        }], props, contextKey);
+        }], props);
         resolve(true);
         return;
       }
@@ -328,13 +309,12 @@ function appendDataTransferImageItem(
 async function appendDataTransferImageItems(
   imageItems: DataTransferItem[],
   props: ChatProps,
-  contextKey?: string,
 ): Promise<boolean> {
   if (imageItems.length === 0) {
     return false;
   }
   const results = await Promise.all(
-    imageItems.map((item) => appendDataTransferImageItem(item, props, contextKey)),
+    imageItems.map((item) => appendDataTransferImageItem(item, props)),
   );
   return results.some(Boolean);
 }
@@ -380,20 +360,20 @@ function handlePaste(e: ClipboardEvent, props: ChatProps) {
   const hasFileItems = hasRealFileItems ||
     (!hasTextItems && clipboardLooksLikeFilePaste(itemList, clipboardTypes));
 
+  // 设计取舍（已评估，可接受）：默认图片体积小、dataUrl 转换近乎瞬时，这里读到即追加 / 发送不等待，
+  // 不再跟踪 pending、不快照冻结 composer。已知边界：超大图片刚粘贴就立刻回车，该附件可能来不及
+  // 读完而漏发（仍可在下一次发送时带上）。这是为换取无竞态的简单路径主动接受的取舍，非缺陷，
+  // 也无需按“大图上传风险”加固。
+
   // 纯内存图片（非文件粘贴，如部分应用的“复制图片”）才在渲染层读 DOM image 条目。
   if (!hasFileItems) {
     if (imageItems.length > 0) {
       e.preventDefault();
-      if (!canChangeAttachments(props)) {
-        return;
-      }
       if (props.supportsImageInput !== true) {
-        props.onUnsupportedImageAttachment?.(props.attachmentContextKey);
+        props.onUnsupportedImageAttachment?.();
         return;
       }
-      const contextKey = props.attachmentContextKey;
-      const pending = appendDataTransferImageItems(imageItems, props, contextKey).then(() => {});
-      trackAttachmentPending(props, pending);
+      void appendDataTransferImageItems(imageItems, props);
       return;
     }
   }
@@ -408,35 +388,27 @@ function handlePaste(e: ClipboardEvent, props: ChatProps) {
       return;
     }
     e.preventDefault();
-    if (!canChangeAttachments(props)) {
-      return;
-    }
-    trackAttachmentPending(props, addNativeClipboardImage(bridge, props));
+    void addNativeClipboardImage(bridge, props);
     return;
   }
   e.preventDefault();
-  if (!canChangeAttachments(props)) {
-    return;
-  }
   const bridge = oneclawFileBridge();
   if (!bridge?.readClipboardFileAttachments) return;
-  const contextKey = props.attachmentContextKey;
-  const pending = bridge.readClipboardFileAttachments({ allowImages: props.supportsImageInput === true }).then(async (result) => {
+  void bridge.readClipboardFileAttachments({ allowImages: props.supportsImageInput === true }).then(async (result) => {
     if (!result?.attachments?.length && !result?.rejectedImageCount) {
       if (imageItems.length > 0) {
         if (props.supportsImageInput !== true) {
-          props.onUnsupportedImageAttachment?.(contextKey);
+          props.onUnsupportedImageAttachment?.();
           return;
         }
-        if (await appendDataTransferImageItems(imageItems, props, contextKey)) {
+        if (await appendDataTransferImageItems(imageItems, props)) {
           return;
         }
       }
       return addNativeClipboardImage(bridge, props);
     }
-    addAttachmentCandidates(result, props, contextKey);
+    addAttachmentCandidates(result, props);
   }).catch(() => {});
-  trackAttachmentPending(props, pending);
 }
 
 // 渲染附件预览时复用统一判断，让粘贴、拖拽、附件按钮的图片/文件展示保持一致。
@@ -727,7 +699,7 @@ export function renderChat(props: ChatProps) {
               type="button"
               @click=${() => requestFileAttachments(props)}
               data-tooltip=${t("chat.attachFile")}
-              ?disabled=${!props.connected || !canChangeAttachments(props)}
+              ?disabled=${!props.connected}
             >
               ${icons.paperclip}
             </button>
