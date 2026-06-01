@@ -79,13 +79,10 @@ export interface SavedProviderEntry {
   supportImage?: boolean;
 }
 
-export interface ConfiguredModel {
-  key: string;
-  name: string;
-  provider: string;
-  isDefault: boolean;
-  alias?: string;
-}
+// ConfiguredModel 的唯一定义在 ../ui-types.ts；这里导入供本模块使用并 re-export，
+// 消除两份会漂移的副本。
+import type { ConfiguredModel } from "../ui-types.ts";
+export type { ConfiguredModel };
 
 export interface FeishuConfig {
   enabled: boolean;
