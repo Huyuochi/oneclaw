@@ -1533,11 +1533,6 @@ async function handleApplyUpdate(state: AppViewState) {
 let fileDropBound = false;
 let latestFileDropState: AppViewState | null = null;
 
-function reportUnsupportedImageAttachment(state: AppViewState) {
-  state.lastError = t("chat.imageUnsupported");
-  state.requestUpdate();
-}
-
 // 拖拽监听器只需绑定一次，但回调必须读到最新 state，所以用 update 桥接当前引用。
 function ensureFileDropBridge(state: AppViewState) {
   latestFileDropState = state;
@@ -1547,15 +1542,11 @@ function ensureFileDropBridge(state: AppViewState) {
   // 不再跟踪 pending、不快照冻结 composer。已知边界：超大图片刚粘贴/拖入就立刻回车，该附件可能来不及
   // 读完而漏发（仍可在下一次发送时带上）。这是为换取无竞态的简单路径主动接受的取舍，非缺陷，
   // 也无需按“大图上传风险”加固。
+  // 图片始终保留（能力仅作提示，不再拦截）；path-only 图片仍由 normalize 静默跳过。
   window.addEventListener("oneclaw:file-drop", ((e: CustomEvent<ChatAttachmentCandidateResult>) => {
     const latestState = latestFileDropState;
     if (!latestState) return;
-    const modelChangePending = latestState.modelChangePendingSessionKey === latestState.sessionKey;
-    const supportsImages = !modelChangePending && currentModelSupportsImages(
-      latestState.configuredModels, latestState.currentModel,
-    );
-    const normalized = normalizeAttachmentCandidates(e.detail, supportsImages);
-    if (normalized.rejectedImageCount > 0) reportUnsupportedImageAttachment(latestState);
+    const normalized = normalizeAttachmentCandidates(e.detail);
     if (normalized.attachments.length) {
       latestState.chatAttachments = [...(latestState.chatAttachments ?? []), ...normalized.attachments];
       latestState.requestUpdate();
@@ -1586,7 +1577,8 @@ export function renderApp(state: AppViewState) {
   const workspaceActive = oneclawView === "workspace";
   const cronActive = oneclawView === "cron";
   const modelChangePending = state.modelChangePendingSessionKey === state.sessionKey;
-  const supportsImageInput = !modelChangePending && currentModelSupportsImages(
+  // 被动能力指示：当前模型是否支持图片输入（仅驱动 composer 图标，不再拦截发送）。
+  const modelSupportsImages = currentModelSupportsImages(
     state.configuredModels,
     state.currentModel,
   );
@@ -2015,10 +2007,7 @@ export function renderApp(state: AppViewState) {
                   onThinkingLevelChange: (level: string) => state.handleThinkingLevelChange(level),
                   attachments: state.chatAttachments,
                   onAttachmentsChange: (next) => (state.chatAttachments = next),
-                  supportsImageInput,
-                  onUnsupportedImageAttachment: () => {
-                    reportUnsupportedImageAttachment(state);
-                  },
+                  modelSupportsImages,
                   onSend: () => state.handleSendChat(),
                   canAbort: Boolean(state.chatRunId),
                   onAbort: () => void state.handleAbortChat(),

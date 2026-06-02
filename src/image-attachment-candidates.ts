@@ -10,7 +10,6 @@ export type FileAttachmentCandidate = {
 
 export type FileAttachmentResult = {
   attachments: FileAttachmentCandidate[];
-  rejectedImageCount: number;
 };
 
 const IMAGE_MIME_BY_EXT: Record<string, string> = {
@@ -32,13 +31,10 @@ function fileNameFromPath(filePath: string): string {
 
 export async function buildFileAttachmentResult(
   filePaths: string[],
-  options: { allowImages?: boolean } = {},
 ): Promise<FileAttachmentResult> {
   // 这里仅处理已由主进程自身用户入口产生的路径（文件选择器/当前剪贴板文件列表）；
-  // 不接收 renderer 传入的任意路径，图片失败也不能降级为 path-only 文件。
-  const allowImages = options.allowImages !== false;
+  // 不接收 renderer 传入的任意路径，图片读取失败也不能降级为 path-only 文件，直接跳过。
   const attachments: FileAttachmentCandidate[] = [];
-  let rejectedImageCount = 0;
   for (const filePath of filePaths) {
     if (typeof filePath !== "string" || !filePath) {
       continue;
@@ -49,10 +45,6 @@ export async function buildFileAttachmentResult(
       attachments.push({ name, filePath });
       continue;
     }
-    if (!allowImages) {
-      rejectedImageCount++;
-      continue;
-    }
     try {
       const content = await fs.promises.readFile(filePath);
       attachments.push({
@@ -61,8 +53,8 @@ export async function buildFileAttachmentResult(
         dataUrl: `data:${mimeType};base64,${content.toString("base64")}`,
       });
     } catch {
-      rejectedImageCount++;
+      // 读取失败的图片直接跳过，不降级为 path-only。
     }
   }
-  return { attachments, rejectedImageCount };
+  return { attachments };
 }

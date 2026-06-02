@@ -7481,7 +7481,13 @@ img.chat-avatar {
   font-family: var(--font-body);
   border-radius: 6px;
   transition: color 150ms ease;
+  /* 盒子按当前选中项的文字宽度伸缩，而非按最宽选项撑开；
+     否则切到短名字时右侧留白变大，右邻的图片能力图标看起来离文字更远。 */
+  field-sizing: content;
   max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-compose__model-select:hover:not(:disabled) {
@@ -7503,6 +7509,51 @@ img.chat-avatar {
 .chat-compose__model-select option {
   color: var(--text);
   background: var(--bg);
+}
+
+/* 图片能力指示 — 模型名右侧的被动图标，仅提示当前模型是否支持图片输入 */
+.chat-compose__img-capability {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  /* 与模型名（font-size 12px）同高 */
+  width: 14px;
+  height: 14px;
+  margin-left: 2px;
+  color: var(--muted);
+}
+
+.chat-compose__img-capability svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 纯文本模型：同一字形叠加左上→右下斜杠，整体呈灰态读作“禁用”，不抢主红色 accent */
+.chat-compose__img-capability--unsupported {
+  opacity: 0.6;
+}
+
+.chat-compose__img-capability--unsupported::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* 渐变色带与渐变轴垂直：轴指向 ↗（to top right）才能得到 ↘ 的 \ 斜杠（左上→右下）。
+     方框 14×14 为正方形，故为精确 45°。 */
+  background: linear-gradient(
+    to top right,
+    transparent calc(50% - 1px),
+    currentColor calc(50% - 1px),
+    currentColor calc(50% + 1px),
+    transparent calc(50% + 1px)
+  );
+  pointer-events: none;
 }
 
 /* 思考开关 — 纯图标 toggle */

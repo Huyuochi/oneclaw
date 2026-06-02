@@ -643,10 +643,6 @@ ipcMain.handle("app:download-and-install-update", () => downloadAndInstallUpdate
 ipcMain.handle("app:open-external", (_e, url: string) => shell.openExternal(appendChannelUtm(url)));
 ipcMain.handle("app:open-path", (_e, filePath: string) => shell.openPath(filePath));
 
-function shouldReadImageAttachments(options?: { allowImages?: unknown }): boolean {
-  return options?.allowImages !== false;
-}
-
 async function readClipboardAttachmentFilePaths(): Promise<string[]> {
   try {
     if (process.platform === "darwin") {
@@ -675,31 +671,23 @@ async function readClipboardAttachmentFilePaths(): Promise<string[]> {
 }
 
 // 文件选择器直接产出附件候选；图片读取只绑定到本次系统 picker 结果，不接受 renderer 提供路径。
-ipcMain.handle("dialog:select-file-attachments", async (
-  _e,
-  options?: { filters?: Electron.FileFilter[]; allowImages?: boolean },
-) => {
+ipcMain.handle("dialog:select-file-attachments", async () => {
   const win = BrowserWindow.getFocusedWindow();
   const result = await dialog.showOpenDialog(win ?? {
     // fallback: 无聚焦窗口时仍可弹出
   } as any, {
     properties: ["openFile", "multiSelections"],
-    filters: options?.filters,
   });
   if (result.canceled) {
-    return { attachments: [], rejectedImageCount: 0 };
+    return { attachments: [] };
   }
-  return buildFileAttachmentResult(result.filePaths, {
-    allowImages: shouldReadImageAttachments(options),
-  });
+  return buildFileAttachmentResult(result.filePaths);
 });
 
 // 当前剪贴板文件列表直接产出附件候选；图片读取只绑定到用户复制到剪贴板的文件。
-ipcMain.handle("clipboard:read-file-attachments", async (_e, options?: { allowImages?: boolean }) => {
+ipcMain.handle("clipboard:read-file-attachments", async () => {
   const filePaths = await readClipboardAttachmentFilePaths();
-  return buildFileAttachmentResult(filePaths, {
-    allowImages: shouldReadImageAttachments(options),
-  });
+  return buildFileAttachmentResult(filePaths);
 });
 
 // DOM 剪贴板拿不到图片文件时的兜底通道，把系统剪贴板位图转成渲染层可直接使用的 data URL。

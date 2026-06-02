@@ -19,7 +19,6 @@ export type ChatAttachmentCandidate = Omit<Partial<ChatAttachment>, "id">;
 
 export type ChatAttachmentCandidateResult = {
   attachments: ChatAttachmentCandidate[];
-  rejectedImageCount?: number;
 };
 
 export type ChatQueueItem = {

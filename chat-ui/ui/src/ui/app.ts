@@ -1075,7 +1075,7 @@ export class OpenClawApp extends LitElement {
   // 切换当前 session 的模型（通过 sessions.patch RPC）。
   // 用自增 modelChangeRequestSeq 标记每次请求，只有最新一次（isLatestRequest）才允许写回 UI 状态，
   // 避免快速连点时旧请求的成功/失败回调覆盖更晚的选择。本地先乐观更新 currentModel，
-  // patch 失败再回滚到 previousModel，并在期间用 modelChangePendingSessionKey 标记“切换进行中”以禁用选择器与图片门控。
+  // patch 失败再回滚到 previousModel，并在期间用 modelChangePendingSessionKey 标记“切换进行中”以禁用选择器。
   async handleModelChange(modelKey: string) {
     const previousModel = this.currentModel;
     if (!this.client || !this.connected) {

@@ -9,7 +9,6 @@ type AttachmentCandidate = {
 
 type AttachmentCandidateResult = {
   attachments: AttachmentCandidate[];
-  rejectedImageCount: number;
 };
 
 const IMAGE_MIME_BY_EXT: Record<string, string> = {
@@ -57,9 +56,8 @@ function readDroppedImageDataUrl(file: File, filePath: string): Promise<string |
 
 async function buildDroppedAttachmentResult(files: FileList): Promise<AttachmentCandidateResult> {
   // drop 是唯一不经过主进程 picker/clipboard 的文件入口；图片只从本次拖入的 File 对象读，
-  // 读取失败不回退成 path-only 图片，避免重新引入“按路径读图片”的边界。
+  // 读取失败不回退成 path-only 图片（避免重新引入“按路径读图片”的边界），直接跳过该文件。
   const attachments: AttachmentCandidate[] = [];
-  let rejectedImageCount = 0;
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     if (!file) {
@@ -82,8 +80,6 @@ async function buildDroppedAttachmentResult(files: FileList): Promise<Attachment
             ? file.type
             : imageMimeTypeForName(filePath || name) ?? undefined,
         });
-      } else {
-        rejectedImageCount++;
       }
       continue;
     }
@@ -91,7 +87,7 @@ async function buildDroppedAttachmentResult(files: FileList): Promise<Attachment
       attachments.push({ name, filePath });
     }
   }
-  return { attachments, rejectedImageCount };
+  return { attachments };
 }
 
 // 安全桥接 — 向渲染进程暴露有限 API
@@ -271,11 +267,10 @@ contextBridge.exposeInMainWorld("oneclaw", {
   openPath: (path: string) => ipcRenderer.invoke("app:open-path", path),
 
   // 文件选择
-  selectFileAttachments: (
-    options?: { filters?: Array<{ name: string; extensions: string[] }>; allowImages?: boolean },
-  ) => ipcRenderer.invoke("dialog:select-file-attachments", options) as Promise<AttachmentCandidateResult>,
-  readClipboardFileAttachments: (options?: { allowImages?: boolean }) =>
-    ipcRenderer.invoke("clipboard:read-file-attachments", options) as Promise<AttachmentCandidateResult>,
+  selectFileAttachments: () =>
+    ipcRenderer.invoke("dialog:select-file-attachments") as Promise<AttachmentCandidateResult>,
+  readClipboardFileAttachments: () =>
+    ipcRenderer.invoke("clipboard:read-file-attachments") as Promise<AttachmentCandidateResult>,
   // 读取系统剪贴板位图，补齐 DOM paste 拿不到图片项的场景。
   readClipboardImage: () =>
     ipcRenderer.invoke("clipboard:read-image-data-url") as Promise<string | null>,
@@ -402,7 +397,7 @@ document.addEventListener("drop", (e) => {
     })
     .catch(() => {
       window.dispatchEvent(new CustomEvent("oneclaw:file-drop", {
-        detail: { attachments: [], rejectedImageCount: 0 },
+        detail: { attachments: [] },
       }));
     });
 });

@@ -5,7 +5,7 @@ import type {
   ConfiguredModel,
 } from "../ui-types.ts";
 
-// 图片扩展名 → MIME：Chat UI 侧用于门控和预览；主进程/预加载脚本有各自进程内副本。
+// 图片扩展名 → MIME：Chat UI 侧用于能力指示和预览；主进程/预加载脚本有各自进程内副本。
 const IMAGE_MIME_BY_EXT: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -34,7 +34,7 @@ export function currentModelSupportsImages(
   return models?.find((model) => model.key === currentModel)?.supportsImage === true;
 }
 
-// 仅用扩展名做轻量图片判断，上传门禁需要一个同步、低成本的检查。
+// 仅用扩展名做轻量图片判断，候选归一和能力提示需要一个同步、低成本的检查。
 export function pathLooksLikeImage(path: string | null | undefined): boolean {
   if (!path) {
     return false;
@@ -42,7 +42,7 @@ export function pathLooksLikeImage(path: string | null | undefined): boolean {
   return IMAGE_EXTENSIONS.has(extnameLower(path));
 }
 
-// 从附件的 dataUrl、url、MIME 或路径兜底判断图片，发送前拦截需要覆盖所有上传入口。
+// 从附件的 dataUrl、url、MIME 或路径兜底判断图片，覆盖所有上传入口。
 export function attachmentLooksLikeImage(attachment: Partial<ChatAttachment>): boolean {
   if (typeof attachment.dataUrl === "string" && /^data:image\//i.test(attachment.dataUrl)) {
     return true;
@@ -60,19 +60,6 @@ export function attachmentLooksLikeImage(attachment: Partial<ChatAttachment>): b
     return true;
   }
   return pathLooksLikeImage(attachment.filePath) || pathLooksLikeImage(attachment.url);
-}
-
-// 发送、追加、队列共用的图片门控判定：附件含图片且当前模型不支持图片时返回 true。
-// 集中一处定义，避免各调用点各写一份判定而逐渐漂移。
-export function attachmentsBlockedByModel(
-  attachments: ReadonlyArray<Partial<ChatAttachment>> | undefined,
-  models: ConfiguredModel[] | undefined,
-  currentModel: string | null | undefined,
-): boolean {
-  if (!attachments?.some(attachmentLooksLikeImage)) {
-    return false;
-  }
-  return !currentModelSupportsImages(models, currentModel);
 }
 
 // 为 UI 附件生成本地 id，删除附件和测试注入都需要一个统一的 id 来源。
@@ -110,19 +97,15 @@ function candidatePathLooksLikeImage(candidate: ChatAttachmentCandidate): boolea
 }
 
 // 所有附件入口都先归一到这里：图片必须已有 dataUrl，path-only 图片不能降级成普通文件。
+// 图片附件始终保留（能力指示仅作提示，不再拦截）；仅 path-only 图片被静默跳过，
+// 守住“不按路径读图片”这一不变量。
 export function normalizeAttachmentCandidates(
   result: ChatAttachmentCandidateResult | null | undefined,
-  supportsImages: boolean,
   makeId: () => string = createAttachmentId,
-): { attachments: ChatAttachment[]; rejectedImageCount: number } {
+): { attachments: ChatAttachment[] } {
   const attachments: ChatAttachment[] = [];
-  let rejectedImageCount = result?.rejectedImageCount ?? 0;
   for (const candidate of result?.attachments ?? []) {
     if (hasImageDataUrl(candidate)) {
-      if (!supportsImages) {
-        rejectedImageCount++;
-        continue;
-      }
       attachments.push({
         ...candidate,
         id: makeId(),
@@ -131,7 +114,6 @@ export function normalizeAttachmentCandidates(
       continue;
     }
     if (candidatePathLooksLikeImage(candidate)) {
-      rejectedImageCount++;
       continue;
     }
     if (typeof candidate.filePath === "string" && candidate.filePath) {
@@ -142,7 +124,7 @@ export function normalizeAttachmentCandidates(
       });
     }
   }
-  return { attachments, rejectedImageCount };
+  return { attachments };
 }
 
 // 统一决定附件预览地址，避免渲染层分别猜测 dataUrl 和 url。

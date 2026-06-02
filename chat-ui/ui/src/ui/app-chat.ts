@@ -1,14 +1,10 @@
 import type { OpenClawApp } from "./app.ts";
 import type { GatewayHelloOk } from "./gateway.ts";
-import type { ChatAttachment, ChatQueueItem, ConfiguredModel } from "./ui-types.ts";
+import type { ChatAttachment, ChatQueueItem } from "./ui-types.ts";
 import { parseAgentSessionKey } from "../../../src/sessions/session-key-utils.js";
 import { scheduleChatScroll } from "./app-scroll.ts";
 import { setLastActiveSessionKey } from "./app-settings.ts";
 import { resetToolStream } from "./app-tool-stream.ts";
-import {
-  attachmentsBlockedByModel,
-  attachmentLooksLikeImage,
-} from "./chat/attachment-capability.ts";
 import { abortChatRun, loadChatHistory, sendChatMessage } from "./controllers/chat.ts";
 import { loadSessions, patchSession } from "./controllers/sessions.ts";
 import { t } from "./i18n.ts";
@@ -28,11 +24,6 @@ export type ChatHost = {
   hello: GatewayHelloOk | null;
   chatAvatarUrl: string | null;
   sessionsResult: { sessions: Array<{ key: string; label?: string }> } | null;
-  // 真实宿主（OpenClawApp）始终提供这些字段；保持必填可避免门控因字段缺失而静默失效。
-  configuredModels: ConfiguredModel[];
-  currentModel: string | null;
-  modelChangePendingSessionKey: string | null;
-  lastError: string | null;
 };
 
 
@@ -109,26 +100,6 @@ function enqueueChatMessage(
       attachments: hasAttachments ? attachments?.map((att) => ({ ...att })) : undefined,
     },
   ];
-}
-
-// 判断当前模型是否不能发送给定附件中的图片（复用集中判定，避免与其它入口漂移）。
-function hasUnsupportedImageAttachments(
-  host: ChatHost,
-  attachments: ChatAttachment[] | undefined,
-): boolean {
-  if (
-    host.modelChangePendingSessionKey === host.sessionKey &&
-    attachments?.some(attachmentLooksLikeImage)
-  ) {
-    return true;
-  }
-  return attachmentsBlockedByModel(attachments, host.configuredModels, host.currentModel);
-}
-
-// 统一设置图片不支持错误，供直接发送和队列发送复用。
-// lastError 是响应式状态，赋值即触发 Lit 重渲染，无需显式 requestUpdate。
-function reportUnsupportedImageAttachment(host: ChatHost): void {
-  host.lastError = t("chat.imageUnsupported");
 }
 
 const SESSION_NAME_MAX_LEN = 20;
@@ -240,10 +211,6 @@ async function flushChatQueue(host: ChatHost) {
   if (!next) {
     return;
   }
-  if (hasUnsupportedImageAttachments(host, next.attachments)) {
-    reportUnsupportedImageAttachment(host);
-    return;
-  }
   host.chatQueue = rest;
   const ok = await sendChatMessageNow(host, next.text, {
     attachments: next.attachments,
@@ -278,12 +245,6 @@ export async function handleSendChat(
 
   if (isChatStopCommand(message)) {
     await handleAbortChat(host);
-    return false;
-  }
-
-  // 发送前最后兜底：纯文本模型不能带图片附件发出。
-  if (hasUnsupportedImageAttachments(host, attachmentsToSend)) {
-    reportUnsupportedImageAttachment(host);
     return false;
   }
 

@@ -84,8 +84,8 @@ export type ChatProps = {
   // Image attachments
   attachments?: ChatAttachment[];
   onAttachmentsChange?: (attachments: ChatAttachment[]) => void;
-  supportsImageInput?: boolean;
-  onUnsupportedImageAttachment?: () => void;
+  // 被动能力指示：当前模型是否支持图片输入（仅控制图标状态与 tooltip，不拦截发送）。
+  modelSupportsImages?: boolean;
   // Scroll control
   showNewMessages?: boolean;
   onScrollToBottom?: () => void;
@@ -199,14 +199,26 @@ function renderCompactionIndicator(status: CompactionIndicatorStatus | null | un
   return nothing;
 }
 
+// 被动图片能力指示：放在模型选择器右侧，与模型名同高。
+// 多模态 → icons.image 原始字形；纯文本 → 同一字形叠加左上→右下斜杠（CSS 伪元素，字形本身不变）。
+// 仅作提示，不拦截发送；斜杠呈“禁用/灰态”，不抢主红色 accent。
+function renderImageCapabilityIndicator(props: ChatProps) {
+  const supportsImages = props.modelSupportsImages === true;
+  const tooltip = supportsImages ? t("chat.modelSupportsImage") : t("chat.modelNoImage");
+  return html`
+    <span
+      class="chat-compose__img-capability ${supportsImages ? "" : "chat-compose__img-capability--unsupported"}"
+      data-tooltip=${tooltip}
+      aria-label=${tooltip}
+      role="img"
+    >${icons.image}</span>
+  `;
+}
+
 type OneclawFileBridge = {
-  readClipboardFileAttachments?: (
-    options?: { allowImages?: boolean },
-  ) => Promise<ChatAttachmentCandidateResult>;
+  readClipboardFileAttachments?: () => Promise<ChatAttachmentCandidateResult>;
   readClipboardImage?: () => Promise<string | null>;
-  selectFileAttachments?: (
-    options?: { filters?: Array<{ name: string; extensions: string[] }>; allowImages?: boolean },
-  ) => Promise<ChatAttachmentCandidateResult>;
+  selectFileAttachments?: () => Promise<ChatAttachmentCandidateResult>;
 };
 
 // 集中收窄 window.oneclaw 类型，避免粘贴、附件按钮等入口重复做 unsafe cast。
@@ -222,16 +234,10 @@ function appendAttachments(additions: ChatAttachment[], props: ChatProps) {
   props.onAttachmentsChange?.([...current, ...additions]);
 }
 
-// 附件按钮和文件粘贴共用入口；只接收用户入口产出的候选，path-only 图片在这里被拒绝。
+// 附件按钮和文件粘贴共用入口；只接收用户入口产出的候选，path-only 图片在这里被静默跳过。
 function addAttachmentCandidates(result: ChatAttachmentCandidateResult, props: ChatProps) {
   if (!props.onAttachmentsChange) return;
-  const normalized = normalizeAttachmentCandidates(
-    result,
-    props.supportsImageInput === true,
-  );
-  if (normalized.rejectedImageCount > 0) {
-    props.onUnsupportedImageAttachment?.();
-  }
+  const normalized = normalizeAttachmentCandidates(result);
   appendAttachments(normalized.attachments, props);
 }
 
@@ -244,7 +250,7 @@ function requestFileAttachments(props: ChatProps) {
   // 不再跟踪 pending、不快照冻结 composer。已知边界：超大图片刚选择就立刻回车，该附件可能来不及
   // 读完而漏发（仍可在下一次发送时带上）。这是为换取无竞态的简单路径主动接受的取舍，非缺陷，
   // 也无需按“大图上传风险”加固。
-  void bridge.selectFileAttachments({ allowImages: props.supportsImageInput === true }).then((result) => {
+  void bridge.selectFileAttachments().then((result) => {
     addAttachmentCandidates(result, props);
   }).catch(() => {});
 }
@@ -259,7 +265,6 @@ function appendImageDataUrl(dataUrl: string, props: ChatProps) {
 }
 
 // 处理 Electron 原生剪贴板图片兜底；有些应用粘贴图片时 DOM items 为空，只能从主进程读。
-// 必须先读剪贴板确认确实有图片，再按模型能力提示：否则纯文本模型下空粘贴/非图片粘贴会误报“不支持图片”。
 async function addNativeClipboardImage(bridge: OneclawFileBridge, props: ChatProps): Promise<void> {
   const readClipboardImage = bridge.readClipboardImage;
   if (!readClipboardImage) {
@@ -267,10 +272,6 @@ async function addNativeClipboardImage(bridge: OneclawFileBridge, props: ChatPro
   }
   const dataUrl = await readClipboardImage().catch(() => null);
   if (!dataUrl) {
-    return;
-  }
-  if (props.supportsImageInput !== true) {
-    props.onUnsupportedImageAttachment?.();
     return;
   }
   appendImageDataUrl(dataUrl, props);
@@ -369,10 +370,6 @@ function handlePaste(e: ClipboardEvent, props: ChatProps) {
   if (!hasFileItems) {
     if (imageItems.length > 0) {
       e.preventDefault();
-      if (props.supportsImageInput !== true) {
-        props.onUnsupportedImageAttachment?.();
-        return;
-      }
       void appendDataTransferImageItems(imageItems, props);
       return;
     }
@@ -394,13 +391,9 @@ function handlePaste(e: ClipboardEvent, props: ChatProps) {
   e.preventDefault();
   const bridge = oneclawFileBridge();
   if (!bridge?.readClipboardFileAttachments) return;
-  void bridge.readClipboardFileAttachments({ allowImages: props.supportsImageInput === true }).then(async (result) => {
-    if (!result?.attachments?.length && !result?.rejectedImageCount) {
+  void bridge.readClipboardFileAttachments().then(async (result) => {
+    if (!result?.attachments?.length) {
       if (imageItems.length > 0) {
-        if (props.supportsImageInput !== true) {
-          props.onUnsupportedImageAttachment?.();
-          return;
-        }
         if (await appendDataTransferImageItems(imageItems, props)) {
           return;
         }
@@ -777,12 +770,14 @@ export function renderChat(props: ChatProps) {
                     </option>
                   `)}
                 </select>
+                ${renderImageCapabilityIndicator(props)}
               `
               : props.configuredModels && props.configuredModels.length === 1
                 ? html`
                   <select class="chat-compose__model-select" disabled>
                     <option selected>${props.configuredModels[0].name}</option>
                   </select>
+                  ${renderImageCapabilityIndicator(props)}
                 `
                 : nothing
             }
