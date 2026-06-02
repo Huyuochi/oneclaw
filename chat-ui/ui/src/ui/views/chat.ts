@@ -200,18 +200,18 @@ function renderCompactionIndicator(status: CompactionIndicatorStatus | null | un
 }
 
 // 被动图片能力指示：放在模型选择器右侧，与模型名同高。
-// 多模态 → icons.image 原始字形；纯文本 → 同一字形叠加左上→右下斜杠（CSS 伪元素，字形本身不变）。
-// 仅作提示，不拦截发送；斜杠呈“禁用/灰态”，不抢主红色 accent。
+// 多模态 → 不显示任何内容；纯文本 → 闭眼图标，提示图片无法送达模型。
+// 仅作提示，不拦截发送；呈“禁用/灰态”，不抢主红色 accent。
 function renderImageCapabilityIndicator(props: ChatProps) {
-  const supportsImages = props.modelSupportsImages === true;
-  const tooltip = supportsImages ? t("chat.modelSupportsImage") : t("chat.modelNoImage");
+  if (props.modelSupportsImages === true) return nothing;
+  const tooltip = t("chat.modelNoImage");
   return html`
     <span
-      class="chat-compose__img-capability ${supportsImages ? "" : "chat-compose__img-capability--unsupported"}"
+      class="chat-compose__img-capability"
       data-tooltip=${tooltip}
       aria-label=${tooltip}
       role="img"
-    >${icons.image}</span>
+    >${icons.eyeOff}</span>
   `;
 }
 

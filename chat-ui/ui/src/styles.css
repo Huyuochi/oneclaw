@@ -7535,27 +7535,6 @@ img.chat-avatar {
   stroke-linejoin: round;
 }
 
-/* 纯文本模型：同一字形叠加左上→右下斜杠，整体呈灰态读作“禁用”，不抢主红色 accent */
-.chat-compose__img-capability--unsupported {
-  opacity: 0.6;
-}
-
-.chat-compose__img-capability--unsupported::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  /* 渐变色带与渐变轴垂直：轴指向 ↗（to top right）才能得到 ↘ 的 \ 斜杠（左上→右下）。
-     方框 14×14 为正方形，故为精确 45°。 */
-  background: linear-gradient(
-    to top right,
-    transparent calc(50% - 1px),
-    currentColor calc(50% - 1px),
-    currentColor calc(50% + 1px),
-    transparent calc(50% + 1px)
-  );
-  pointer-events: none;
-}
-
 /* 思考开关 — 纯图标 toggle */
 .chat-compose__thinking-toggle {
   display: inline-flex;
